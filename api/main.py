@@ -1,24 +1,369 @@
-# api/main.py
-
-from fastapi import FastAPI
+import os
+import json
+import asyncio
+from typing import List, Optional, Set
+from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import Session, select
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
-app = FastAPI()
+from database.init_db import engine
+from database.models import Agent, Conversation, Message, Task, ConversationType, TaskStatus
 
-class Task(BaseModel):
-    prompt: str
+# Load environment variables
+load_dotenv()
 
-@app.post("/start_task")
-async def start_task(task: Task):
-    # This will later initiate the AutoGen group chat
-    return {"message": "Task received!", "task_id": "dummy_task_id"}
+# WebSocket connection manager
+class WebSocketManager:
+    def __init__(self):
+        self.active_connections: Set[WebSocket] = set()
 
-@app.get("/get_conversation_history/{task_id}")
-async def get_conversation_history(task_id: str):
-    # This will later return the conversation history
-    return {"task_id": task_id, "history": []}
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.add(websocket)
+        print(f"WebSocket connected. Total connections: {len(self.active_connections)}")
 
-@app.get("/get_latest_update/{task_id}")
-async def get_latest_update(task_id: str):
-    # This will later return new messages
-    return {"task_id": task_id, "new_messages": []}
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.discard(websocket)
+        print(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def broadcast(self, message: dict):
+        if not self.active_connections:
+            return
+            
+        # Convert message to JSON string
+        message_str = json.dumps(message)
+        
+        # Send to all connected clients
+        disconnected = set()
+        for connection in self.active_connections.copy():
+            try:
+                await connection.send_text(message_str)
+            except Exception as e:
+                print(f"Error sending WebSocket message: {e}")
+                disconnected.add(connection)
+        
+        # Remove disconnected clients
+        for connection in disconnected:
+            self.active_connections.discard(connection)
+
+# Create WebSocket manager instance
+websocket_manager = WebSocketManager()
+
+# Create FastAPI app
+app = FastAPI(
+    title="AutoGen Startup Simulation API",
+    description="API for the AI agent startup simulation",
+    version="1.0.0"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],  # Add your frontend URLs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Dependency to get database session
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+# Pydantic models for API responses
+class AgentResponse(BaseModel):
+    id: int
+    name: str
+    role: str
+    persona: str
+    status: str
+    created_at: str
+
+class ConversationResponse(BaseModel):
+    id: int
+    name: str
+    type: str
+    description: Optional[str]
+    created_at: str
+
+class MessageResponse(BaseModel):
+    id: int
+    conversation_id: int
+    agent_id: int
+    agent_name: str
+    content: str
+    type: str
+    timestamp: str
+
+class TaskRequest(BaseModel):
+    title: str
+    description: str
+    conversation_id: Optional[int] = None
+
+class TaskResponse(BaseModel):
+    id: int
+    title: str
+    description: str
+    status: str
+    conversation_id: Optional[int]
+    created_at: str
+
+# Root endpoint
+@app.get("/")
+async def root():
+    return {
+        "message": "Welcome to the AutoGen Startup Simulation API!",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "AutoGen Startup Simulation API"}
+
+# GET /agents - Returns all agents
+@app.get("/agents", response_model=List[AgentResponse])
+async def get_agents(session: Session = Depends(get_session)):
+    """Get all AI agents in the simulation"""
+    try:
+        agents = session.exec(select(Agent)).all()
+        return [
+            AgentResponse(
+                id=agent.id,
+                name=agent.name,
+                role=agent.role,
+                persona=agent.persona,
+                status=agent.status.value,
+                created_at=agent.created_at.isoformat()
+            )
+            for agent in agents
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching agents: {str(e)}")
+
+# GET /conversations - Returns all conversations
+@app.get("/conversations", response_model=List[ConversationResponse])
+async def get_conversations(session: Session = Depends(get_session)):
+    """Get all conversations (channels and DMs)"""
+    try:
+        conversations = session.exec(select(Conversation)).all()
+        return [
+            ConversationResponse(
+                id=conv.id,
+                name=conv.name,
+                type=conv.type.value,
+                description=conv.description,
+                created_at=conv.created_at.isoformat()
+            )
+            for conv in conversations
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching conversations: {str(e)}")
+
+# GET /conversations/{conv_id}/messages - Returns message history for a conversation
+@app.get("/conversations/{conv_id}/messages", response_model=List[MessageResponse])
+async def get_conversation_messages(
+    conv_id: int, 
+    limit: int = 100,
+    session: Session = Depends(get_session)
+):
+    """Get message history for a specific conversation"""
+    try:
+        # Check if conversation exists
+        conversation = session.get(Conversation, conv_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        # Get messages with agent information
+        query = (
+            select(Message, Agent)
+            .join(Agent, Message.agent_id == Agent.id)
+            .where(Message.conversation_id == conv_id)
+            .order_by(Message.timestamp.desc())
+            .limit(limit)
+        )
+        
+        results = session.exec(query).all()
+        
+        return [
+            MessageResponse(
+                id=message.id,
+                conversation_id=message.conversation_id,
+                agent_id=message.agent_id,
+                agent_name=agent.name,
+                content=message.content,
+                type=message.type.value,
+                timestamp=message.timestamp.isoformat()
+            )
+            for message, agent in results
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching messages: {str(e)}")
+
+# POST /tasks - Create a new task and trigger agent conversation
+@app.post("/tasks", response_model=TaskResponse)
+async def create_task(
+    task_request: TaskRequest,
+    session: Session = Depends(get_session)
+):
+    """Create a new task for the AI agents and trigger conversation"""
+    try:
+        # Create new task
+        task = Task(
+            title=task_request.title,
+            description=task_request.description,
+            status=TaskStatus.PENDING,
+            assigned_conversation_id=task_request.conversation_id or 1  # Default to #general
+        )
+        
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        
+        print(f"📝 New task created: {task.title}")
+        
+        # Broadcast task creation
+        await broadcast_task_update(task)
+        
+        # Update task status to in_progress
+        task.status = TaskStatus.IN_PROGRESS
+        session.add(task)
+        session.commit()
+        
+        # Trigger agent conversation in the background
+        import sys
+        sys.path.append('.')
+        
+        # Import the agent conversation function
+        try:
+            from main import run_agent_conversation
+            
+            # Start the agent conversation in a background task
+            asyncio.create_task(run_agent_conversation(
+                task.title,
+                task.description,
+                task.assigned_conversation_id
+            ))
+            
+            print(f"🚀 Started agent conversation for task: {task.title}")
+            
+        except ImportError as import_error:
+            print(f"❌ Could not import agent conversation function: {import_error}")
+        except Exception as conversation_error:
+            print(f"❌ Error starting agent conversation: {conversation_error}")
+        
+        return TaskResponse(
+            id=task.id,
+            title=task.title,
+            description=task.description,
+            status=task.status.value,
+            conversation_id=task.assigned_conversation_id,
+            created_at=task.created_at.isoformat()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating task: {str(e)}")
+
+# GET /tasks - Get all tasks
+@app.get("/tasks", response_model=List[TaskResponse])
+async def get_tasks(session: Session = Depends(get_session)):
+    """Get all tasks"""
+    try:
+        tasks = session.exec(select(Task).order_by(Task.created_at.desc())).all()
+        return [
+            TaskResponse(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                status=task.status.value,
+                conversation_id=task.assigned_conversation_id,
+                created_at=task.created_at.isoformat()
+            )
+            for task in tasks
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching tasks: {str(e)}")
+
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket_manager.connect(websocket)
+    
+    try:
+        # Send welcome message
+        await websocket.send_text(json.dumps({
+            "type": "connection_established",
+            "message": "Connected to AutoGen Startup Simulation"
+        }))
+        
+        # Keep connection alive and handle incoming messages
+        while True:
+            try:
+                # Wait for messages from client (ping/pong, etc.)
+                data = await websocket.receive_text()
+                message = json.loads(data)
+                
+                # Handle different message types
+                if message.get("type") == "ping":
+                    await websocket.send_text(json.dumps({"type": "pong"}))
+                else:
+                    print(f"Received WebSocket message: {message}")
+                    
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                print(f"WebSocket error: {e}")
+                break
+                
+    finally:
+        websocket_manager.disconnect(websocket)
+
+# Helper function to broadcast new messages
+async def broadcast_new_message(message: Message, agent_name: str):
+    """Broadcast a new message to all connected WebSocket clients"""
+    await websocket_manager.broadcast({
+        "type": "new_message",
+        "data": {
+            "id": message.id,
+            "conversationId": message.conversation_id,
+            "agentId": message.agent_id,
+            "agentName": agent_name,
+            "content": message.content,
+            "timestamp": message.timestamp.isoformat(),
+            "type": message.type.value
+        }
+    })
+
+# Helper function to broadcast agent status updates
+async def broadcast_agent_status_update(agent_id: int, status: str):
+    """Broadcast agent status update to all connected WebSocket clients"""
+    await websocket_manager.broadcast({
+        "type": "agent_status_update", 
+        "data": {
+            "agentId": agent_id,
+            "status": status
+        }
+    })
+
+# Helper function to broadcast task updates
+async def broadcast_task_update(task: Task):
+    """Broadcast task update to all connected WebSocket clients"""
+    await websocket_manager.broadcast({
+        "type": "task_update",
+        "data": {
+            "id": task.id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status.value,
+            "conversationId": task.assigned_conversation_id,
+            "createdAt": task.created_at.isoformat()
+        }
+    })
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

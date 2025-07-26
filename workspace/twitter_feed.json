@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2025-07-26T16:37:56.870206",
+    "message": "Test tweet from agent!",
+    "engagement": {
+      "likes": 0,
+      "retweets": 0,
+      "replies": 0
+    },
+    "status": "posted"
+  }
+]
