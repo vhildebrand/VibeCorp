@@ -55,20 +55,20 @@ This document breaks down the development work outlined in the revised `PRODUCT_
 **Goal:** Expose the state of the autonomous simulation via the API and connect the frontend to display agent activities in real-time.
 
 ### Tasks:
-- [ ] **API Endpoints (`api/main.py`):**
-    - [ ] Implement the new API endpoints defined in the technical design: `GET /agents`, `GET /agents/{agent_id}/tasks`, `GET /conversations/{conv_id}/messages`.
-- [ ] **Backend WebSocket (`api/main.py`):**
-    - [ ] Create a listener that reads from the `asyncio.Queue`.
-    - [ ] When a new message is added to the queue, broadcast it to all connected frontend clients via the `/ws` WebSocket.
-    - [ ] Broadcast updates when an agent's task list changes.
-- [ ] **Frontend State Management (`startup-simulator-ui/src/store.ts`):**
-    - [ ] Add `agentTasks` to the Zustand store.
-    - [ ] Implement the WebSocket client logic to listen for new messages and task updates and update the store accordingly.
-- [ ] **UI Implementation (`startup-simulator-ui/src/`):**
-    - [ ] Create the new `TodoList.tsx` component to display the contents of `agentTasks` for a selected agent.
-    - [ ] Integrate the `TodoList.tsx` component into the `AgentProfile.tsx` or a similar view.
+- [x] **API Endpoints (`api/main.py`):**
+    - [x] Implement the new API endpoints defined in the technical design: `GET /agents`, `GET /agents/{agent_id}/tasks`, `GET /conversations/{conv_id}/messages`.
+- [x] **Backend WebSocket (`api/main.py`):**
+    - [x] Create a listener that reads from the `asyncio.Queue`.
+    - [x] When a new message is added to the queue, broadcast it to all connected frontend clients via the `/ws` WebSocket.
+    - [x] Broadcast updates when an agent's task list changes.
+- [x] **Frontend State Management (`startup-simulator-ui/src/store.ts`):**
+    - [x] Add `agentTasks` to the Zustand store.
+    - [x] Implement the WebSocket client logic to listen for new messages and task updates and update the store accordingly.
+- [x] **UI Implementation (`startup-simulator-ui/src/`):**
+    - [x] Create the new `TodoList.tsx` component to display the contents of `agentTasks` for a selected agent.
+    - [x] Integrate the `TodoList.tsx` component into the `AgentProfile.tsx` or a similar view.
 
-**Deliverable:** A fully connected application. The frontend displays conversations and agent to-do lists in real-time as the simulation runs on the backend.
+**Deliverable:** ✅ A fully connected application. The frontend displays conversations and agent to-do lists in real-time as the simulation runs on the backend.
 
 ---
 

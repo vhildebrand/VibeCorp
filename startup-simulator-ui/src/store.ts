@@ -42,12 +42,27 @@ export interface Task {
   createdAt: string;
 }
 
+export interface AgentTask {
+  id: number;
+  title: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  priority: number;
+}
+
+export interface AgentTaskList {
+  agent_id: number;
+  agent_name: string;
+  tasks: AgentTask[];
+}
+
 interface AppState {
   // State
   agents: Agent[];
   conversations: Conversation[];
   messages: Message[];
   tasks: Task[];
+  agentTasks: Record<number, AgentTask[]>; // agentId -> tasks
   activeConversationId: number | null;
   sidebarCollapsed: boolean;
   
@@ -57,6 +72,7 @@ interface AppState {
     conversations: boolean;
     messages: boolean;
     tasks: boolean;
+    agentTasks: boolean;
   };
   
   // Error states
@@ -72,11 +88,12 @@ interface AppState {
   markConversationAsRead: (id: number) => void;
   addMessage: (message: Omit<Message, 'id'>) => void;
   updateAgentStatus: (agentId: number, status: Agent['status']) => void;
+  updateAgentTasks: (agentId: number, tasks: AgentTask[]) => void;
   
   // API actions
   loadInitialData: () => Promise<void>;
   loadConversationMessages: (conversationId: number) => Promise<void>;
-  createTask: (title: string, description: string, conversationId?: number) => Promise<void>;
+  loadAgentTasks: (agentId: number) => Promise<void>;
   
   // WebSocket actions
   connectWebSocket: () => Promise<void>;
@@ -265,6 +282,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   conversations: [],
   messages: [],
   tasks: [],
+  agentTasks: {}, // Initialize agentTasks as an empty object
   activeConversationId: null, // Will be set after conversations load
   sidebarCollapsed: false,
   
@@ -274,6 +292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     conversations: false,
     messages: false,
     tasks: false,
+    agentTasks: false,
   },
   
   // Error state
@@ -333,32 +352,37 @@ export const useAppStore = create<AppState>((set, get) => ({
       } : agent
     )
   })),
+
+  updateAgentTasks: (agentId: number, tasks: AgentTask[]) => set((state) => ({
+    agentTasks: {
+      ...state.agentTasks,
+      [agentId]: tasks
+    }
+  })),
   
   // API actions
   loadInitialData: async () => {
     const state = get();
     
-    set({ loading: { ...state.loading, agents: true, conversations: true, tasks: true }, error: null });
+    set({ loading: { ...state.loading, agents: true, conversations: true, tasks: true, agentTasks: false }, error: null });
     
     try {
-      // Load agents, conversations, and tasks in parallel
-      const [agents, conversations, tasks] = await Promise.all([
+      // Load agents and conversations in parallel
+      const [agents, conversations] = await Promise.all([
         apiService.getAgents(),
         apiService.getConversations(),
-        apiService.getTasks(),
       ]);
       
       // Update conversations with member information
-      const updatedConversations = conversations.map(conv => ({
+      const updatedConversations = conversations.map((conv: any) => ({
         ...conv,
-        members: agents.map(agent => agent.id), // For now, all agents are in all conversations
+        members: agents.map((agent: any) => agent.id), // For now, all agents are in all conversations
       }));
       
       set({
         agents,
         conversations: updatedConversations,
-        tasks,
-        loading: { agents: false, conversations: false, messages: false, tasks: false },
+        loading: { agents: false, conversations: false, messages: false, tasks: false, agentTasks: false },
         error: null,
       });
       
@@ -370,7 +394,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       console.error('Error loading initial data:', error);
       set({
-        loading: { agents: false, conversations: false, messages: false, tasks: false },
+        loading: { agents: false, conversations: false, messages: false, tasks: false, agentTasks: false },
         error: error instanceof Error ? error.message : 'Failed to load data',
       });
     }
@@ -379,7 +403,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadConversationMessages: async (conversationId: number) => {
     const state = get();
     
-    set({ loading: { ...state.loading, messages: true }, error: null });
+    set({ loading: { ...state.loading, messages: true, agentTasks: false }, error: null });
     
     try {
       const messages = await apiService.getConversationMessages(conversationId);
@@ -405,41 +429,50 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         messages: allMessages,
         conversations: updatedConversations,
-        loading: { ...state.loading, messages: false },
+        loading: { ...state.loading, messages: false, agentTasks: false },
         error: null,
       });
       
     } catch (error) {
       console.error('Error loading conversation messages:', error);
       set({
-        loading: { ...state.loading, messages: false },
+        loading: { ...state.loading, messages: false, agentTasks: false },
         error: error instanceof Error ? error.message : 'Failed to load messages',
       });
     }
   },
-  
-  createTask: async (title: string, description: string, conversationId?: number) => {
+
+  loadAgentTasks: async (agentId: number) => {
     const state = get();
-    
-    set({ loading: { ...state.loading, tasks: true }, error: null });
-    
+    set({ loading: { ...state.loading, agentTasks: true }, error: null });
     try {
-      const newTask = await apiService.createTask(title, description, conversationId);
+      const data = await apiService.getAgentTasks(agentId);
+      const tasks: AgentTask[] = (data.tasks || []).map(task => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        status: task.status as AgentTask['status'],
+        priority: task.priority
+      }));
       
       set({
-        tasks: [...state.tasks, newTask],
-        loading: { ...state.loading, tasks: false },
-        error: null,
+        agentTasks: {
+          ...state.agentTasks,
+          [agentId]: tasks
+        },
+        loading: { ...state.loading, agentTasks: false },
+        error: null
       });
-      
     } catch (error) {
-      console.error('Error creating task:', error);
+      console.error('Error loading agent tasks:', error);
       set({
-        loading: { ...state.loading, tasks: false },
-        error: error instanceof Error ? error.message : 'Failed to create task',
+        loading: { ...state.loading, agentTasks: false },
+        error: error instanceof Error ? error.message : 'Failed to load agent tasks'
       });
     }
   },
+  
+
   
   // WebSocket actions
   connectWebSocket: async () => {
@@ -488,6 +521,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           case 'agent_status_update':
             // Update agent status
             currentState.updateAgentStatus(message.data.agentId, message.data.status);
+            break;
+
+          case 'agent_tasks_updated':
+            // Update agent tasks
+            const taskData = message.data;
+            currentState.updateAgentTasks(taskData.agent_id, taskData.tasks);
+            break;
+            
+          case 'agent_activity':
+            // Handle agent activity updates (tool usage, etc.)
+            console.log('Agent activity:', message.data);
             break;
             
           case 'task_update':

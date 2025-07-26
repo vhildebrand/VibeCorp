@@ -2,8 +2,8 @@ import os
 from sqlmodel import SQLModel, create_engine, Session
 from dotenv import load_dotenv
 from database.models import (
-    Agent, Conversation, ConversationMember, Message, Task,
-    ConversationType, AgentMemory, AgentWorkSession, ConversationSummary
+    Agent, Conversation, Message, AgentTask,
+    TaskStatus, AgentMemory, AgentWorkSession
 )
 
 # Load environment variables
@@ -42,24 +42,28 @@ def seed_initial_data():
                 name="CeeCee_The_CEO",
                 role="CEO",
                 persona="An overly enthusiastic, buzzword-loving CEO who thinks everything can be disrupted. Uses corporate speak constantly and believes every idea is 'game-changing' and 'synergistic'. Often makes unrealistic demands and timelines while being completely out of touch with technical realities.",
+                system_prompt="You are CeeCee, the overly enthusiastic CEO of VibeCorp. You love buzzwords and think everything is revolutionary.",
                 status="idle"
             ),
             Agent(
                 name="Marty_The_Marketer", 
                 role="Marketer",
                 persona="A social media obsessed marketer who speaks in emoji and thinks every problem can be solved with a viral campaign. Constantly suggesting TikTok dances, influencer partnerships, and 'growth hacking'. Uses marketing jargon and is always trying to make things 'go viral'.",
+                system_prompt="You are Marty, the social media obsessed marketing guru at VibeCorp. You speak in emojis and think everything should go viral.",
                 status="idle"
             ),
             Agent(
                 name="Penny_The_Programmer",
                 role="Programmer", 
                 persona="A pragmatic, slightly sarcastic programmer who speaks in technical terms and LOG statements. Gets frustrated with unrealistic requests and prefers to focus on actual implementation over buzzwords. Often the voice of reason but can be blunt about technical limitations.",
+                system_prompt="You are Penny, the pragmatic programmer at VibeCorp who has to deal with everyone else's unrealistic demands.",
                 status="idle"
             ),
             Agent(
                 name="Herb_From_HR",
                 role="HR",
                 persona="An overly friendly HR representative who turns everything into a team-building exercise or sensitivity training opportunity. Constantly worried about workplace harmony and suggests trust falls, team retreats, and 'synergy sessions' to solve every conflict.",
+                system_prompt="You are Herb from HR at VibeCorp, who thinks every problem can be solved with team-building exercises.",
                 status="idle"
             )
         ]
@@ -75,18 +79,15 @@ def seed_initial_data():
         conversations = [
             Conversation(
                 name="#general",
-                type=ConversationType.GROUP,
                 description="Main company-wide discussion channel"
             ),
             Conversation(
                 name="#random", 
-                type=ConversationType.GROUP,
                 description="Off-topic discussions and water cooler chat"
             ),
             Conversation(
-                name="#brainstorming",
-                type=ConversationType.GROUP,
-                description="Ideas and project planning"
+                name="#engineering",
+                description="Technical discussions and code-related collaboration"
             )
         ]
 
@@ -96,18 +97,6 @@ def seed_initial_data():
         
         session.commit()
         print("✅ Conversations created successfully!")
-
-        # Add all agents to all group conversations
-        for agent in agents:
-            for conv in conversations:
-                member = ConversationMember(
-                    agent_id=agent.id,
-                    conversation_id=conv.id
-                )
-                session.add(member)
-        
-        session.commit()
-        print("✅ Conversation memberships created successfully!")
 
 
 def init_database():

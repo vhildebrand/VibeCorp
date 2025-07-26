@@ -20,15 +20,12 @@ interface ApiAgent {
   role: string;
   persona: string;
   status: string;
-  created_at: string;
 }
 
 interface ApiConversation {
   id: number;
   name: string;
-  type: string;
   description?: string;
-  created_at: string;
 }
 
 interface ApiMessage {
@@ -37,17 +34,21 @@ interface ApiMessage {
   agent_id: number;
   agent_name: string;
   content: string;
-  type: string;
   timestamp: string;
 }
 
-interface ApiTask {
+interface ApiAgentTask {
   id: number;
   title: string;
   description: string;
   status: string;
-  conversation_id?: number;
-  created_at: string;
+  priority: number;
+}
+
+interface ApiAgentTasksResponse {
+  agent_id: number;
+  agent_name: string;
+  tasks: ApiAgentTask[];
 }
 
 // Helper function to transform API agent to frontend agent
@@ -97,10 +98,10 @@ const getAgentColor = (name: string): string => {
 const transformConversation = (apiConversation: ApiConversation): Conversation => ({
   id: apiConversation.id,
   name: apiConversation.name,
-  type: apiConversation.type as 'group' | 'dm',
+  type: 'group', // All conversations are group channels now
   description: apiConversation.description,
   members: [], // Will be populated separately
-  lastMessageTime: apiConversation.created_at,
+  lastMessageTime: new Date().toISOString(), // Default to current time
   unreadCount: 0, // Will be calculated based on messages
 });
 
@@ -112,17 +113,7 @@ const transformMessage = (apiMessage: ApiMessage): Message => ({
   agentName: apiMessage.agent_name,
   content: apiMessage.content,
   timestamp: apiMessage.timestamp,
-  type: apiMessage.type as 'message' | 'action',
-});
-
-// Helper function to transform API task to frontend task
-const transformTask = (apiTask: ApiTask): Task => ({
-  id: apiTask.id,
-  title: apiTask.title,
-  description: apiTask.description,
-  status: apiTask.status as 'pending' | 'in_progress' | 'completed',
-  assignedTo: [], // Will be populated separately if needed
-  createdAt: apiTask.created_at,
+  type: 'message', // All messages are type 'message' now
 });
 
 // API service functions
@@ -153,20 +144,10 @@ export const apiService = {
     return response.data.reverse().map(transformMessage); // Reverse to get chronological order
   },
 
-  // Get all tasks
-  async getTasks(): Promise<Task[]> {
-    const response = await apiClient.get<ApiTask[]>('/tasks');
-    return response.data.map(transformTask);
-  },
-
-  // Create a new task
-  async createTask(title: string, description: string, conversationId?: number): Promise<Task> {
-    const response = await apiClient.post<ApiTask>('/tasks', {
-      title,
-      description,
-      conversation_id: conversationId,
-    });
-    return transformTask(response.data);
+  // Get tasks for a specific agent
+  async getAgentTasks(agentId: number): Promise<ApiAgentTasksResponse> {
+    const response = await apiClient.get<ApiAgentTasksResponse>(`/agents/${agentId}/tasks`);
+    return response.data;
   },
 };
 

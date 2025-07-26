@@ -264,7 +264,35 @@ async def get_agent_todo_list(agent_model: Agent) -> List[AgentTask]:
 async def decide_next_action(agent_model: Agent, agent_instance, messages: List[Dict], todo_list: List[AgentTask]) -> Dict[str, Any]:
     """Decide what action the agent should take next."""
     
-    # Simple decision logic for now - we'll enhance this in future iterations
+    # Check if we should communicate with the team (occasionally)
+    import random
+    
+    # 10% chance to share an update if they've completed tasks recently
+    if random.random() < 0.1 and todo_list:
+        completed_tasks_count = len([t for t in todo_list if t.status == TaskStatus.COMPLETED])
+        if completed_tasks_count > 0:
+            return {
+                "type": "use_tool",
+                "tool": "share_update",
+                "args": {"agent_name": agent_model.name, "update": f"Just finished {completed_tasks_count} tasks! Making good progress on my work."}
+            }
+    
+    # 5% chance to ask for help if they have blocked tasks
+    if random.random() < 0.05 and todo_list:
+        blocked_tasks = [t for t in todo_list if t.status == TaskStatus.BLOCKED]
+        if blocked_tasks:
+            blocked_task = blocked_tasks[0]
+            return {
+                "type": "use_tool", 
+                "tool": "ask_for_help",
+                "args": {
+                    "agent_name": agent_model.name,
+                    "topic": blocked_task.title,
+                    "details": f"I'm stuck on this task: {blocked_task.description}. Any ideas?"
+                }
+            }
+    
+    # Most of the time, focus on work
     if todo_list:
         # Work on the highest priority task
         current_task = todo_list[0]
@@ -387,12 +415,19 @@ async def update_task_progress(task_id: int):
             task.status = TaskStatus.IN_PROGRESS
             session.add(task)
             session.commit()
+            
+            # Broadcast task list update
+            try:
+                from api.main import broadcast_task_list_update
+                await broadcast_task_list_update(task.agent_id)
+            except ImportError:
+                pass  # Avoid circular import issues
 
 
 async def broadcast_agent_action(agent_model: Agent, tool_name: str, result: str, message_queue: asyncio.Queue):
-    """Broadcast an agent's action to other agents via the message queue."""
+    """Update agent status and broadcast activity to frontend (but not to chat channels)."""
     
-    # Create a message about the action (simplified for now)
+    # Create a message about the action for other agents to see
     action_message = {
         "type": "agent_action",
         "agent": agent_model.name,
@@ -401,25 +436,40 @@ async def broadcast_agent_action(agent_model: Agent, tool_name: str, result: str
         "timestamp": asyncio.get_event_loop().time()
     }
     
-    # Add to message queue for other agents to see
+    # Add to message queue for other agents to see (internal communication)
     await message_queue.put(action_message)
     
-    # Also save to database as a regular message (for the frontend)
+    # Update agent status based on the tool they're using
+    status_map = {
+        "web_search": "researching",
+        "write_to_file": "coding", 
+        "read_file": "reviewing_code",
+        "list_files": "organizing",
+        "add_task": "planning",
+        "complete_task": "completing_work",
+        "get_my_todo_list": "planning"
+    }
+    
+    new_status = status_map.get(tool_name, "working")
+    
+    # Update the agent's status in the database
     try:
         with Session(engine) as session:
-            # Find the #general conversation (or create it)
-            general_conv = session.exec(
-                select(Conversation).where(Conversation.name == "#general")
-            ).first()
-            
-            if general_conv:
-                message = Message(
-                    conversation_id=general_conv.id,
-                    agent_id=agent_model.id,
-                    content=f"🔧 Used {tool_name}: {result[:150]}..."
-                )
-                session.add(message)
+            agent = session.get(Agent, agent_model.id)
+            if agent:
+                agent.status = new_status
+                session.add(agent)
                 session.commit()
                 
+                # Broadcast status update to frontend via WebSocket
+                try:
+                    from api.main import broadcast_agent_status_update
+                    await broadcast_agent_status_update(agent.id, new_status)
+                except ImportError:
+                    pass
+                    
     except Exception as e:
-        print(f"⚠️ Could not save action message: {e}") 
+        print(f"⚠️ Could not update agent status: {e}")
+        
+    # Only send a message to chat if it's something worth sharing (like completing a major task)
+    # Most tool usage should just update status, not spam chat 

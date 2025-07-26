@@ -1,21 +1,20 @@
 import os
 import json
 import asyncio
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Union
 from fastapi import FastAPI, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import aiohttp
+import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import status
 
-from database.init_db import engine
-from database.models import Agent, Conversation, Message, Task, ConversationType, TaskStatus
 from agents.agent_context import agent_context_manager
 from database.init_db import init_database, engine
-from database.models import Agent, Conversation, Message, Task, TaskStatus, AgentMemory, AgentMemoryType, ConversationType, MessageType, ConversationMember
+from database.models import Agent, Conversation, Message, TaskStatus, AgentTask, AgentMemory, AgentMemoryType, MessageType
 from agents.agents import get_all_agents, get_agent_by_name, create_agents_with_tools
 
 # Load environment variables
@@ -56,7 +55,7 @@ class WebSocketManager:
             self.active_connections.discard(connection)
 
 # Global aiohttp session
-http_session: aiohttp.ClientSession | None = None
+http_session: Optional[aiohttp.ClientSession] = None
 
 # Global agent manager
 agent_manager = None
@@ -103,6 +102,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Database dependency
+def get_session():
+    with Session(engine) as session:
+        yield session
+
 # Configure CORS for production and development
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
 
@@ -127,14 +131,11 @@ class AgentResponse(BaseModel):
     role: str
     persona: str
     status: str
-    created_at: str
 
 class ConversationResponse(BaseModel):
     id: int
     name: str
-    type: str
     description: Optional[str]
-    created_at: str
 
 class MessageResponse(BaseModel):
     id: int
@@ -142,7 +143,6 @@ class MessageResponse(BaseModel):
     agent_id: int
     agent_name: str
     content: str
-    type: str
     timestamp: str
 
 class TaskRequest(BaseModel):
@@ -184,8 +184,7 @@ async def get_agents(session: Session = Depends(get_session)):
                 name=agent.name,
                 role=agent.role,
                 persona=agent.persona,
-                status=agent.status,
-                created_at=agent.created_at.isoformat()
+                status=agent.status
             )
             for agent in agents
         ]
@@ -202,9 +201,7 @@ async def get_conversations(session: Session = Depends(get_session)):
             ConversationResponse(
                 id=conv.id,
                 name=conv.name,
-                type=conv.type.value,
-                description=conv.description,
-                created_at=conv.created_at.isoformat()
+                description=conv.description
             )
             for conv in conversations
         ]
@@ -243,7 +240,6 @@ async def get_conversation_messages(
                 agent_id=message.agent_id,
                 agent_name=agent.name,
                 content=message.content,
-                type=message.type.value,
                 timestamp=message.timestamp.isoformat()
             )
             for message, agent in results
@@ -253,88 +249,16 @@ async def get_conversation_messages(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching messages: {str(e)}")
 
-# POST /tasks - Create a new task and trigger agent conversation
-@app.post("/tasks", response_model=TaskResponse)
-async def create_task(
-    task_request: TaskRequest,
-    session: Session = Depends(get_session)
-):
-    """Create a new task for the AI agents and trigger conversation"""
-    try:
-        # Create new task
-        task = Task(
-            title=task_request.title,
-            description=task_request.description,
-            status=TaskStatus.PENDING,
-            assigned_conversation_id=task_request.conversation_id or 1  # Default to #general
-        )
-        
-        session.add(task)
-        session.commit()
-        session.refresh(task)
-        
-        print(f"📝 New task created: {task.title}")
-        
-        # Broadcast task creation
-        await broadcast_task_update(task)
-        
-        # Update task status to in_progress
-        task.status = TaskStatus.IN_PROGRESS
-        session.add(task)
-        session.commit()
-        
-        # Trigger agent conversation in the background
-        import sys
-        sys.path.append('.')
-        
-        # Import the agent conversation function
-        try:
-            from main import run_agent_conversation
-            
-            # Start the agent conversation in a background task
-            asyncio.create_task(run_agent_conversation(
-                task.title,
-                task.description,
-                task.assigned_conversation_id
-            ))
-            
-            print(f"🚀 Started agent conversation for task: {task.title}")
-            
-        except ImportError as import_error:
-            print(f"❌ Could not import agent conversation function: {import_error}")
-        except Exception as conversation_error:
-            print(f"❌ Error starting agent conversation: {conversation_error}")
-        
-        return TaskResponse(
-            id=task.id,
-            title=task.title,
-            description=task.description,
-            status=task.status.value,
-            conversation_id=task.assigned_conversation_id,
-            created_at=task.created_at.isoformat()
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating task: {str(e)}")
+# Legacy task endpoints - temporarily disabled while we focus on agent-specific tasks
+# These used the old Task model which has been replaced with AgentTask
 
-# GET /tasks - Get all tasks
-@app.get("/tasks", response_model=List[TaskResponse])
-async def get_tasks(session: Session = Depends(get_session)):
-    """Get all tasks"""
-    try:
-        tasks = session.exec(select(Task).order_by(Task.created_at.desc())).all()
-        return [
-            TaskResponse(
-                id=task.id,
-                title=task.title,
-                description=task.description,
-                status=task.status.value,
-                conversation_id=task.assigned_conversation_id,
-                created_at=task.created_at.isoformat()
-            )
-            for task in tasks
-        ]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching tasks: {str(e)}")
+# @app.post("/tasks", response_model=TaskResponse)
+# async def create_task(...):
+#     # Implementation temporarily disabled
+
+# @app.get("/tasks", response_model=List[TaskResponse])
+# async def get_tasks(...):
+#     # Implementation temporarily disabled
 
 # WebSocket endpoint for real-time updates
 @app.websocket("/ws")
@@ -370,6 +294,84 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         websocket_manager.disconnect(websocket)
 
+async def message_queue_listener():
+    """
+    Background task that listens to the message queue and broadcasts
+    agent activities to WebSocket clients.
+    """
+    print("🎧 Starting message queue listener...")
+    
+    while True:
+        try:
+            # Wait for messages from the agent message queue
+            message = await message_queue.get()
+            
+            # Broadcast different types of messages
+            if message.get("type") == "agent_action":
+                await websocket_manager.broadcast({
+                    "type": "agent_activity",
+                    "data": {
+                        "agent": message["agent"],
+                        "action": message["tool"],
+                        "result": message["result"],
+                        "timestamp": message["timestamp"]
+                    }
+                })
+                print(f"📡 Broadcasted agent activity: {message['agent']} used {message['tool']}")
+                
+            elif message.get("type") == "task_update":
+                await websocket_manager.broadcast({
+                    "type": "task_update",
+                    "data": message
+                })
+                print(f"📡 Broadcasted task update")
+                
+            # Mark task as done
+            message_queue.task_done()
+            
+        except asyncio.CancelledError:
+            print("🛑 Message queue listener cancelled")
+            break
+        except Exception as e:
+            print(f"❌ Error in message queue listener: {e}")
+            await asyncio.sleep(1)
+
+
+async def broadcast_task_list_update(agent_id: int):
+    """Broadcast when an agent's task list is updated."""
+    try:
+        with Session(engine) as session:
+            agent = session.exec(select(Agent).where(Agent.id == agent_id)).first()
+            if not agent:
+                return
+                
+            tasks = session.exec(
+                select(AgentTask)
+                .where(AgentTask.agent_id == agent_id)
+                .order_by(AgentTask.priority)
+            ).all()
+            
+            await websocket_manager.broadcast({
+                "type": "agent_tasks_updated",
+                "data": {
+                    "agent_id": agent_id,
+                    "agent_name": agent.name,
+                    "tasks": [
+                        {
+                            "id": task.id,
+                            "title": task.title,
+                            "description": task.description,
+                            "status": task.status.value,
+                            "priority": task.priority
+                        }
+                        for task in tasks
+                    ]
+                }
+            })
+            
+    except Exception as e:
+        print(f"❌ Error broadcasting task list update: {e}")
+
 # Helper function to broadcast new messages
 async def broadcast_new_message(message: Message, agent_name: str):
     """Broadcast a new message to all connected WebSocket clients."""
@@ -381,8 +383,7 @@ async def broadcast_new_message(message: Message, agent_name: str):
             "agentId": message.agent_id,
             "agentName": agent_name,
             "content": message.content,
-            "timestamp": message.timestamp.isoformat(),
-            "type": message.type.value
+            "timestamp": message.timestamp.isoformat()
         }
     })
 
@@ -396,16 +397,17 @@ async def broadcast_agent_status_update(agent_id: int, status: str):
     })
 
 # Helper function to broadcast task updates
-async def broadcast_task_update(task: Task):
+async def broadcast_task_update(task: AgentTask):
     """Broadcast a task update to all clients."""
     await websocket_manager.broadcast({
-        "type": "task_update",
+        "type": "agent_task_update",
         "task": {
             "id": task.id,
             "title": task.title,
             "description": task.description,
             "status": task.status.value,
-            "assigned_conversation_id": task.assigned_conversation_id
+            "priority": task.priority,
+            "agent_id": task.agent_id
         }
     })
 
@@ -435,7 +437,10 @@ async def start_simulation():
         from agents.agent_manager import AgentManager
         
         agent_manager = AgentManager(message_queue)
+        
+        # Start the agent manager and message queue listener
         asyncio.create_task(agent_manager.start())
+        asyncio.create_task(message_queue_listener())
         
         return {"message": "Agent simulation started in the background.", "status": "starting"}
         

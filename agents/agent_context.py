@@ -10,7 +10,7 @@ from typing import List, Dict, Optional, Tuple
 from sqlmodel import Session, select, desc
 from database.init_db import engine
 from database.models import (
-    Agent, Message, AgentMemory, AgentWorkSession, ConversationSummary,
+    Agent, Message, AgentMemory, AgentWorkSession,
     AgentMemoryType, Conversation
 )
 import os

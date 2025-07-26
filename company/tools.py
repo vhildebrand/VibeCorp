@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Optional, List
 from sqlmodel import Session, select
 from agents.status_tool import set_agent_status
+from agents.communication_tools import send_message_to_channel, send_direct_message, ask_for_help, share_update
 from database.init_db import engine
 from database.models import AgentTask, TaskStatus, Agent
 
@@ -533,6 +534,10 @@ AVAILABLE_TOOLS = {
     # Communication & Research Tools
     "post_to_twitter": post_to_twitter,
     "web_search": web_search,
+    "send_message_to_channel": send_message_to_channel,
+    "send_direct_message": send_direct_message,
+    "ask_for_help": ask_for_help,
+    "share_update": share_update,
     
     # Business Tools
     "manage_budget": manage_budget,
