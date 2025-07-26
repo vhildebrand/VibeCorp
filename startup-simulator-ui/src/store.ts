@@ -10,6 +10,7 @@ export interface Agent {
   status: 'idle' | 'thinking' | 'coding' | 'researching' | 'tweeting' | 'in_meeting';
   avatar: string;
   color: string;
+  lastStatusUpdate?: string; // Timestamp of last status change
 }
 
 export interface Conversation {
@@ -323,7 +324,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   
   updateAgentStatus: (agentId: number, status: Agent['status']) => set((state) => ({
     agents: state.agents.map(agent =>
-      agent.id === agentId ? { ...agent, status } : agent
+      agent.id === agentId ? { 
+        ...agent, 
+        status, 
+        lastStatusUpdate: new Date().toISOString() 
+      } : agent
     )
   })),
   

@@ -43,15 +43,15 @@ const ActivityFeed: React.FC = () => {
         icon: '🎯'
       }));
     
-    // Agent status changes (mock for now)
+    // Agent status changes - use actual status change timestamps
     const statusUpdates = agents
       .filter(agent => agent.status !== 'idle')
-      .map(agent => ({
+      .map((agent, index) => ({
         id: `status-${agent.id}`,
         type: 'agent_status' as const,
         agent: agent.name,
         content: `${agent.name.replace(/_/g, ' ')} is ${agent.status.replace(/_/g, ' ')}`,
-        timestamp: new Date().toISOString(),
+        timestamp: agent.lastStatusUpdate || new Date(Date.now() - (index * 60000)).toISOString(), // Use real timestamps, fallback to staggered recent times
         icon: getStatusIcon(agent.status)
       }));
     

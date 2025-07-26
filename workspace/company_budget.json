@@ -1,0 +1,41 @@
+{
+  "current_balance": 50000.0,
+  "transactions": [
+    {
+      "type": "expense",
+      "amount": -50000,
+      "description": "Aggressive investment in growth initiatives and performance metrics analysis",
+      "timestamp": "2025-07-26T18:09:54.131263",
+      "balance_after": 50000.0
+    },
+    {
+      "type": "expense",
+      "amount": -5000,
+      "description": "Allocate budget for social media engagement and promotional content.",
+      "timestamp": "2025-07-26T18:42:31.468617",
+      "balance_after": 45000.0
+    },
+    {
+      "type": "expense",
+      "amount": -5000,
+      "description": "Allocate budget for additional resources to expedite UX improvements.",
+      "timestamp": "2025-07-26T19:00:02.375025",
+      "balance_after": 40000.0
+    },
+    {
+      "type": "expense",
+      "amount": -40000,
+      "description": "Initial investment in AI integration for product enhancements",
+      "timestamp": "2025-07-26T19:35:31.018438",
+      "balance_after": 0.0
+    },
+    {
+      "type": "revenue",
+      "amount": 50000,
+      "description": "Fundraising round for product development initiatives.",
+      "timestamp": "2025-07-26T19:42:44.200322",
+      "balance_after": 50000.0
+    }
+  ],
+  "monthly_burn_rate": 15000.0
+}

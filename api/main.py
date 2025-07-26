@@ -58,33 +58,113 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Start autonomous scheduler when the app starts
+# Wipe database for fresh debugging sessions
+async def wipe_database_for_debug():
+    """Wipe conversation data for fresh debugging session"""
+    print("🔄 Wiping database for fresh debug session...")
+    
+    from sqlmodel import delete
+    from database.models import Message, AgentMemory, AgentWorkSession, ConversationSummary, Task
+    
+    try:
+        with Session(engine) as session:
+            # Count existing data
+            message_count = len(session.exec(select(Message)).all())
+            memory_count = len(session.exec(select(AgentMemory)).all())
+            task_count = len(session.exec(select(Task)).all())
+            
+            print(f"📊 Clearing: {message_count} messages, {memory_count} memories, {task_count} tasks")
+            
+            # Delete all conversation data
+            session.exec(delete(Message))
+            session.exec(delete(AgentMemory))
+            session.exec(delete(AgentWorkSession))
+            session.exec(delete(ConversationSummary))
+            session.exec(delete(Task))
+            session.commit()
+            
+            print("✅ Database wiped clean for debugging!")
+            
+    except Exception as e:
+        print(f"⚠️  Database wipe error: {e}")
+
+# Setup DM conversations
+async def setup_dm_conversations():
+    """Ensure DM conversations exist between all agent pairs"""
+    try:
+        from itertools import combinations
+        from database.models import ConversationMember
+        
+        with Session(engine) as session:
+            agents = session.exec(select(Agent)).all()
+            dm_pairs = list(combinations(agents, 2))
+            created_count = 0
+            
+            for agent1, agent2 in dm_pairs:
+                names = sorted([agent1.name, agent2.name])
+                dm_name = f"DM: {names[0].replace('_', ' ')} & {names[1].replace('_', ' ')}"
+                
+                existing_dm = session.exec(
+                    select(Conversation).where(Conversation.name == dm_name).where(Conversation.type == ConversationType.DM)
+                ).first()
+                
+                if not existing_dm:
+                    dm_conversation = Conversation(
+                        name=dm_name, type=ConversationType.DM,
+                        description=f"Direct message conversation between {agent1.name.replace('_', ' ')} and {agent2.name.replace('_', ' ')}"
+                    )
+                    session.add(dm_conversation)
+                    session.commit()
+                    session.refresh(dm_conversation)
+                    
+                    member1 = ConversationMember(agent_id=agent1.id, conversation_id=dm_conversation.id)
+                    member2 = ConversationMember(agent_id=agent2.id, conversation_id=dm_conversation.id)
+                    session.add(member1)
+                    session.add(member2)
+                    session.commit()
+                    created_count += 1
+            
+            print(f"💌 DM conversations ready ({created_count} created)")
+            
+    except Exception as e:
+        print(f"⚠️  DM setup error: {e}")
+
+# Start contextual scheduler when the app starts  
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the autonomous agent scheduler"""
-    print("🚀 Starting AutoGen Startup Simulation API...")
+    """Initialize fresh debug session with contextual agents"""
+    print("🚀 Starting Fresh Debug Session - AutoGen API")
+    print("=" * 55)
     
-    # Import and start the autonomous scheduler
+    # Step 1: Wipe database for clean debugging
+    await wipe_database_for_debug()
+    
+    # Step 2: Setup DM conversations
+    await setup_dm_conversations()
+    
+    # Step 3: Start contextual scheduler
     try:
-        from agents.autonomous_scheduler import autonomous_scheduler
+        from agents.contextual_scheduler import contextual_scheduler
         # Start the scheduler in the background
-        asyncio.create_task(autonomous_scheduler.start())
-        print("🤖 Autonomous agent scheduler started!")
+        asyncio.create_task(contextual_scheduler.start())
+        print("🤖 Contextual agent scheduler started!")
+        print("🎯 Debug config: 15-45s intervals, 70% DMs, 20 msg history")
+        print("=" * 55)
     except Exception as e:
-        print(f"❌ Error starting autonomous scheduler: {e}")
+        print(f"❌ Error starting contextual scheduler: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Clean up when the app shuts down"""
     print("🛑 Shutting down AutoGen Startup Simulation API...")
     
-    # Stop the autonomous scheduler
+    # Stop the contextual scheduler
     try:
-        from agents.autonomous_scheduler import autonomous_scheduler
-        await autonomous_scheduler.stop()
-        print("🤖 Autonomous agent scheduler stopped!")
+        from agents.contextual_scheduler import contextual_scheduler
+        await contextual_scheduler.stop()
+        print("🤖 Contextual agent scheduler stopped!")
     except Exception as e:
-        print(f"❌ Error stopping autonomous scheduler: {e}")
+        print(f"❌ Error stopping contextual scheduler: {e}")
 
 # Configure CORS for production and development
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")

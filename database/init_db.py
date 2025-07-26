@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from dotenv import load_dotenv
 from database.models import (
     Agent, Conversation, ConversationMember, Message, Task,
-    ConversationType
+    ConversationType, AgentMemory, AgentWorkSession, ConversationSummary
 )
 
 # Load environment variables
@@ -42,25 +42,25 @@ def seed_initial_data():
                 name="CeeCee_The_CEO",
                 role="CEO",
                 persona="An overly enthusiastic, buzzword-loving CEO who thinks everything can be disrupted. Uses corporate speak constantly and believes every idea is 'game-changing' and 'synergistic'. Often makes unrealistic demands and timelines while being completely out of touch with technical realities.",
-                status=AgentStatus.IDLE
+                status="idle"
             ),
             Agent(
                 name="Marty_The_Marketer", 
                 role="Marketer",
                 persona="A social media obsessed marketer who speaks in emoji and thinks every problem can be solved with a viral campaign. Constantly suggesting TikTok dances, influencer partnerships, and 'growth hacking'. Uses marketing jargon and is always trying to make things 'go viral'.",
-                status=AgentStatus.IDLE
+                status="idle"
             ),
             Agent(
                 name="Penny_The_Programmer",
                 role="Programmer", 
                 persona="A pragmatic, slightly sarcastic programmer who speaks in technical terms and LOG statements. Gets frustrated with unrealistic requests and prefers to focus on actual implementation over buzzwords. Often the voice of reason but can be blunt about technical limitations.",
-                status=AgentStatus.IDLE
+                status="idle"
             ),
             Agent(
                 name="Herb_From_HR",
                 role="HR",
                 persona="An overly friendly HR representative who turns everything into a team-building exercise or sensitivity training opportunity. Constantly worried about workplace harmony and suggests trust falls, team retreats, and 'synergy sessions' to solve every conflict.",
-                status=AgentStatus.IDLE
+                status="idle"
             )
         ]
 
