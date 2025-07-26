@@ -193,79 +193,19 @@ async def initialize_agent_tasks(agent_model: Agent):
 
 
 def get_initial_tasks_for_role(role: str) -> List[Dict[str, Any]]:
-    """Get role-appropriate initial tasks for agents."""
-    task_templates = {
-        "CEO": [
+    """Get role-appropriate initial tasks for agents. Only CEO starts with a task - others wait for direction."""
+    if role == "CEO":
+        return [
             {
-                "title": "Define company vision and strategy",
-                "description": "Create a comprehensive business strategy for VibeCorp's next quarter",
+                "title": "Initiate team brainstorming session",
+                "description": "Start a discussion in #general to brainstorm our company's business idea, product vision, and initial goals. Get input from all team members to build consensus.",
                 "priority": 1
-            },
-            {
-                "title": "Review company budget and financial projections",
-                "description": "Analyze current budget and plan resource allocation",
-                "priority": 2
-            },
-            {
-                "title": "Research market opportunities and competitors",
-                "description": "Conduct market research to identify growth opportunities",
-                "priority": 3
-            }
-        ],
-        "Marketer": [
-            {
-                "title": "Develop social media content strategy",
-                "description": "Create a comprehensive social media plan for VibeCorp",
-                "priority": 1
-            },
-            {
-                "title": "Research trending hashtags and viral content",
-                "description": "Find current trends we can leverage for brand awareness",
-                "priority": 2
-            },
-            {
-                "title": "Plan influencer outreach campaign",
-                "description": "Identify and reach out to potential brand ambassadors",
-                "priority": 3
-            }
-        ],
-        "Programmer": [
-            {
-                "title": "Review and optimize codebase architecture",
-                "description": "Audit current code for performance and maintainability issues",
-                "priority": 1
-            },
-            {
-                "title": "Implement security best practices",
-                "description": "Review and enhance application security measures",
-                "priority": 2
-            },
-            {
-                "title": "Create technical documentation",
-                "description": "Document system architecture and API endpoints",
-                "priority": 3
-            }
-        ],
-        "HR": [
-            {
-                "title": "Plan team building activities",
-                "description": "Organize activities to improve team cohesion and morale",
-                "priority": 1
-            },
-            {
-                "title": "Review employee satisfaction metrics",
-                "description": "Analyze team happiness and identify improvement areas",
-                "priority": 2
-            },
-            {
-                "title": "Update company policies and procedures",
-                "description": "Ensure all policies are current and inclusive",
-                "priority": 3
             }
         ]
-    }
-    
-    return task_templates.get(role, [])
+    else:
+        # All other agents start with no tasks - they wait for the CEO to give direction
+        # after the initial brainstorming session
+        return []
 
 
 async def check_for_messages(agent_model: Agent, message_queue: asyncio.Queue) -> List[Dict[str, Any]]:
@@ -387,6 +327,18 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "args": {"action": "view"},
                     "task_id": current_task.id
                 }
+            elif "brainstorm" in current_task.title.lower() or "discussion" in current_task.title.lower():
+                # Start team brainstorming in general channel
+                return {
+                    "type": "use_tool",
+                    "tool": "send_message_to_channel",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "channel": "general",
+                        "message": "🚀 Team! Time for our GAME-CHANGING brainstorming session! 💡 Let's disrupt the market with our REVOLUTIONARY business idea! What product should VibeCorp build to DOMINATE our industry? I want to hear EVERYONE's thoughts - this is our MOONSHOT moment! 🌟"
+                    },
+                    "task_id": current_task.id
+                }
             elif "research" in current_task.title.lower() or "market" in current_task.title.lower():
                 # Only research if it's specifically a research task
                 return {
@@ -396,15 +348,14 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "task_id": current_task.id
                 }
             else:
-                # CEO fallback: create strategic documents instead of web search
+                # CEO fallback: communicate with team instead of creating files
                 return {
                     "type": "use_tool",
-                    "tool": "write_to_file",
+                    "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "path": f"strategy/{current_task.title.lower().replace(' ', '_')}.md",
-                        "content": f"# {current_task.title}\n\n{current_task.description}\n\n## Strategic Approach\n- Priority: {current_task.priority}\n- Status: In Progress\n- Next Steps: [To be defined]\n",
-                        "location": "personal"
+                        "channel": "general",
+                        "message": f"📈 Team, I'm working on {current_task.title}! This is CRITICAL for our success! Let me know if anyone has insights or needs clarification on our strategic direction! 💯"
                     },
                     "task_id": current_task.id
                 }
@@ -434,19 +385,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                 }
                 
         elif agent_model.role == "Programmer":
-            if "documentation" in current_task.title.lower() or "document" in current_task.title.lower():
-                return {
-                    "type": "use_tool",
-                    "tool": "write_to_file",
-                    "args": {
-                        "agent_name": agent_model.name,
-                        "path": "docs/architecture.md",
-                        "content": f"# VibeCorp System Architecture\n\nThis document outlines the technical architecture of our platform.\n\n## Task: {current_task.title}\n{current_task.description}\n\n## Components\n- Frontend: React with TypeScript\n- Backend: FastAPI with Python\n- Database: PostgreSQL\n- Agent System: Custom autonomous agents\n",
-                        "location": "project"
-                    },
-                    "task_id": current_task.id
-                }
-            elif "research" in current_task.title.lower() and ("security" in current_task.title.lower() or "best practices" in current_task.title.lower()):
+            if "research" in current_task.title.lower() and ("security" in current_task.title.lower() or "best practices" in current_task.title.lower()):
                 # Only do web search for explicit research tasks
                 return {
                     "type": "use_tool",
@@ -455,15 +394,14 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "task_id": current_task.id
                 }
             else:
-                # Programmer fallback: create code/implementation files
+                # Programmer fallback: ask for clarification instead of auto-generating files
                 return {
                     "type": "use_tool",
-                    "tool": "write_to_file",
+                    "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "path": f"code/{current_task.title.lower().replace(' ', '_')}.py",
-                        "content": f"# {current_task.title}\n# {current_task.description}\n\ndef main():\n    \"\"\"Implementation for {current_task.title}\"\"\"\n    # TODO: Implement {current_task.title}\n    pass\n\nif __name__ == '__main__':\n    main()\n",
-                        "location": "personal"
+                        "channel": "engineering",
+                        "message": f"🔧 Working on: {current_task.title}. Need some clarification on requirements and scope. What specific deliverables are expected for this task?"
                     },
                     "task_id": current_task.id
                 }
@@ -485,15 +423,14 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "task_id": current_task.id
                 }
             else:
-                # HR fallback: create HR documents and policies
+                # HR fallback: communicate with team instead of auto-generating files
                 return {
                     "type": "use_tool",
-                    "tool": "write_to_file",
+                    "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "path": f"hr_policies/{current_task.title.lower().replace(' ', '_')}.md",
-                        "content": f"# {current_task.title}\n\n{current_task.description}\n\n## HR Policy Framework\n- Objective: {current_task.title}\n- Priority Level: {current_task.priority}\n- Implementation Status: In Progress\n\n## Key Considerations\n- Employee wellbeing\n- Company culture\n- Legal compliance\n- Performance metrics\n",
-                        "location": "personal"
+                        "channel": "general",
+                        "message": f"👥 Hi team! I'm working on {current_task.title}. Would love to get everyone's input on this. How do you think we should approach this from an HR perspective?"
                     },
                     "task_id": current_task.id
                 }
