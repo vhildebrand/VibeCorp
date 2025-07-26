@@ -334,7 +334,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "channel": "general",
+                        "channel_name": "#general",
                         "message": "🚀 Team! Time for our GAME-CHANGING brainstorming session! 💡 Let's disrupt the market with our REVOLUTIONARY business idea! What product should VibeCorp build to DOMINATE our industry? I want to hear EVERYONE's thoughts - this is our MOONSHOT moment! 🌟"
                     },
                     "task_id": current_task.id
@@ -354,7 +354,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "channel": "general",
+                        "channel_name": "#general",
                         "message": f"📈 Team, I'm working on {current_task.title}! This is CRITICAL for our success! Let me know if anyone has insights or needs clarification on our strategic direction! 💯"
                     },
                     "task_id": current_task.id
@@ -400,7 +400,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "channel": "engineering",
+                        "channel_name": "#engineering",
                         "message": f"🔧 Working on: {current_task.title}. Need some clarification on requirements and scope. What specific deliverables are expected for this task?"
                     },
                     "task_id": current_task.id
@@ -429,7 +429,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "tool": "send_message_to_channel",
                     "args": {
                         "agent_name": agent_model.name,
-                        "channel": "general",
+                        "channel_name": "#general",
                         "message": f"👥 Hi team! I'm working on {current_task.title}. Would love to get everyone's input on this. How do you think we should approach this from an HR perspective?"
                     },
                     "task_id": current_task.id
@@ -518,14 +518,21 @@ async def execute_action(agent_model: Agent, agent_instance, action: Dict[str, A
                 tools_needing_agent_name = [
                     "add_task", "complete_task", "get_my_todo_list", "update_task_status",
                     "write_to_file", "read_file", "list_files", "write_tweet",
-                    "share_file_with_agent", "copy_to_project"
+                    "share_file_with_agent", "copy_to_project", "web_search",
+                    "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update"
                 ]
                 if tool_name in tools_needing_agent_name:
                     # These tools need the agent name
                     if "agent_name" not in tool_args:
                         tool_args["agent_name"] = agent_model.name
                 
-                result = tool_func(**tool_args)
+                # Check if the tool is async and await it if necessary
+                import asyncio
+                import inspect
+                if inspect.iscoroutinefunction(tool_func):
+                    result = await tool_func(**tool_args)
+                else:
+                    result = tool_func(**tool_args)
                 print(f"🔧 {agent_model.name} used {tool_name}: {result[:100]}...")
                 
                 # If this action was for a specific task, mark it as in progress or completed

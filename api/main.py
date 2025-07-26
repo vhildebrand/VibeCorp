@@ -78,14 +78,55 @@ async def get_http_session():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage startup and shutdown events."""
-    global http_session
+    global http_session, agent_manager
     print("🚀 Server starting up...")
     
-    # Initialize database
+    # Delete existing database for completely fresh start
+    print("🗄️ Creating completely fresh database...")
+    db_path = "startup_simulation.db"
+    if os.path.exists(db_path):
+        os.remove(db_path)
+        print(f"🗑️ Deleted existing database: {db_path}")
+    
+    # Initialize fresh database
     init_database()
+    print("✅ Fresh database initialized")
+    
+    # Clear twitter feed for fresh start
+    print("🐦 Initializing fresh Twitter feed...")
+    twitter_feed_path = "workspace/twitter_feed.json"
+    fresh_twitter_feed = {
+        "tweets": [],
+        "last_updated": "2025-01-01T00:00:00Z",
+        "total_tweets": 0,
+        "engagement_metrics": {
+            "total_likes": 0,
+            "total_retweets": 0,
+            "total_replies": 0
+        }
+    }
+    os.makedirs("workspace", exist_ok=True)
+    with open(twitter_feed_path, "w") as f:
+        json.dump(fresh_twitter_feed, f, indent=2)
     
     # Create aiohttp session
     http_session = aiohttp.ClientSession()
+    
+    # Automatically start fresh simulation
+    print("🎬 Starting fresh simulation automatically...")
+    try:
+        from agents.agent_manager import AgentManager
+        
+        agent_manager = AgentManager(message_queue)
+        
+        # Start the agent manager and message queue listener
+        asyncio.create_task(agent_manager.start())
+        asyncio.create_task(message_queue_listener())
+        
+        print("✅ Fresh simulation started automatically!")
+        
+    except Exception as e:
+        print(f"❌ Failed to auto-start simulation: {str(e)}")
 
     yield
 
@@ -95,7 +136,6 @@ async def lifespan(app: FastAPI):
         await http_session.close()
     
     # Stop the agent manager if running
-    global agent_manager
     if agent_manager and agent_manager.is_running():
         await agent_manager.stop()
 
