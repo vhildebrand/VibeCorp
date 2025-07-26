@@ -20,13 +20,8 @@ class MessageType(str, Enum):
     ACTION = "action"
 
 
-class AgentStatus(str, Enum):
-    IDLE = "idle"
-    THINKING = "thinking"
-    CODING = "coding"
-    RESEARCHING = "researching"
-    TWEETING = "tweeting"
-    IN_MEETING = "in_meeting"
+# Removed rigid AgentStatus enum - agents can now set any status they want
+# This allows for dynamic, context-aware status updates based on their actual activities
 
 
 # Agent table - stores information about each AI agent
@@ -35,7 +30,7 @@ class Agent(SQLModel, table=True):
     name: str = Field(index=True)
     role: str  # CEO, Marketer, Programmer, HR
     persona: str  # Detailed personality description
-    status: AgentStatus = Field(default=AgentStatus.IDLE)
+    status: str = Field(default="idle")  # Flexible status - agents can set any status they want
     created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationship to messages

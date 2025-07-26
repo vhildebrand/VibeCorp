@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 from typing import Optional
+from agents.status_tool import set_agent_status
 
 def post_to_twitter(message: str) -> str:
     """
@@ -226,5 +227,6 @@ AVAILABLE_TOOLS = {
     "post_to_twitter": post_to_twitter,
     "write_code_to_file": write_code_to_file,
     "web_search": web_search,
-    "manage_budget": manage_budget
+    "manage_budget": manage_budget,
+    "set_agent_status": set_agent_status
 }

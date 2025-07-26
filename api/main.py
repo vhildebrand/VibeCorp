@@ -58,10 +58,41 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Start autonomous scheduler when the app starts
+@app.on_event("startup")
+async def startup_event():
+    """Initialize the autonomous agent scheduler"""
+    print("🚀 Starting AutoGen Startup Simulation API...")
+    
+    # Import and start the autonomous scheduler
+    try:
+        from agents.autonomous_scheduler import autonomous_scheduler
+        # Start the scheduler in the background
+        asyncio.create_task(autonomous_scheduler.start())
+        print("🤖 Autonomous agent scheduler started!")
+    except Exception as e:
+        print(f"❌ Error starting autonomous scheduler: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up when the app shuts down"""
+    print("🛑 Shutting down AutoGen Startup Simulation API...")
+    
+    # Stop the autonomous scheduler
+    try:
+        from agents.autonomous_scheduler import autonomous_scheduler
+        await autonomous_scheduler.stop()
+        print("🤖 Autonomous agent scheduler stopped!")
+    except Exception as e:
+        print(f"❌ Error stopping autonomous scheduler: {e}")
+
+# Configure CORS for production and development
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "*"],  # Add your frontend URLs
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -136,7 +167,7 @@ async def get_agents(session: Session = Depends(get_session)):
                 name=agent.name,
                 role=agent.role,
                 persona=agent.persona,
-                status=agent.status.value,
+                status=agent.status,
                 created_at=agent.created_at.isoformat()
             )
             for agent in agents
@@ -366,4 +397,6 @@ async def broadcast_task_update(task: Task):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    host = os.getenv("HOST", "0.0.0.0")
+    uvicorn.run(app, host=host, port=port)

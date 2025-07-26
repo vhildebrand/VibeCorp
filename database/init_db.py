@@ -3,7 +3,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from dotenv import load_dotenv
 from database.models import (
     Agent, Conversation, ConversationMember, Message, Task,
-    ConversationType, AgentStatus
+    ConversationType
 )
 
 # Load environment variables
@@ -12,8 +12,13 @@ load_dotenv()
 # Get database URL from environment or use default SQLite
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./startup_simulation.db")
 
-# Create engine
-engine = create_engine(DATABASE_URL, echo=True)
+# Configure engine based on database type
+if DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgres://"):
+    # PostgreSQL configuration for production
+    engine = create_engine(DATABASE_URL, echo=True)
+else:
+    # SQLite configuration for local development
+    engine = create_engine(DATABASE_URL, echo=True, connect_args={"check_same_thread": False})
 
 
 def create_tables():

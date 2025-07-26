@@ -1,8 +1,8 @@
 import axios from 'axios';
 import type { Agent, Conversation, Message, Task } from '../store';
 
-// API base URL - adjust based on your backend setup
-const API_BASE_URL = 'http://localhost:8000';
+// API base URL - use environment variable or default to localhost
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 // Create axios instance with default config
 const apiClient = axios.create({
@@ -177,8 +177,11 @@ export class WebSocketService {
   private maxReconnectAttempts: number = 5;
   private reconnectAttempts: number = 0;
   private messageHandlers: ((message: any) => void)[] = [];
+  private url: string;
 
-  constructor(private url: string = 'ws://localhost:8000/ws') {}
+  constructor(url?: string) {
+    this.url = url || (import.meta.env.VITE_WS_URL as string) || 'ws://localhost:8000/ws';
+  }
 
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
