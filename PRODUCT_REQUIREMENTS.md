@@ -4,11 +4,11 @@
 
 This document outlines the requirements for "The AutoGen Startup Simulation," a web application that provides a real-time, "fly-on-the-wall" view into a simulated startup run entirely by autonomous AI agents.
 
-The vision is to create an entertaining and educational sandbox that showcases the capabilities, quirks, and collaborative potential of multi-agent AI systems. Users will observe these AI "employees" as they interact, plan, execute tasks, and navigate office politics, all within a familiar Slack/Microsoft Teams-style interface. The simulation should feel dynamic, unpredictable, and engaging.
+The vision is to create an entertaining and educational sandbox that showcases the capabilities, quirks, and collaborative potential of multi-agent AI systems. Users will observe AI "employees" as they are assigned a high-level goal, form a company, devise a product, and attempt to build it. The simulation should feel dynamic, unpredictable, and engaging, driven by the agents' internal goals and emergent collaboration.
 
 ## 2. Problem Statement
 
-Multi-agent AI systems are powerful but often abstract and difficult to visualize. It's one thing to read a research paper, and another to see agents with distinct personalities trying (and sometimes failing) to work together. This project solves the problem of making multi-agent collaboration tangible and observable. It provides an entertaining narrative layer on top of complex AI interactions, making the technology more accessible and understandable to a broader audience.
+Multi-agent AI systems are powerful but often abstract and difficult to visualize. It's one thing to read a research paper, and another to see agents with distinct personalities trying (and sometimes failing) to work together towards a common goal. This project solves the problem of making multi-agent collaboration tangible and observable. It provides an entertaining narrative layer on top of complex AI interactions, making the technology more accessible and understandable to a broader audience.
 
 ## 3. Target Audience
 
@@ -18,33 +18,34 @@ Multi-agent AI systems are powerful but often abstract and difficult to visualiz
 
 ## 4. Core Features
 
-### 4.1. The AI "Company"
-*   **Diverse Agent Personas:** The company will be staffed by a cast of AI agents with distinct roles, personalities, and communication styles (e.g., clueless CEO, buzzword-loving Marketer, grumpy Programmer, HR busybody).
-*   **Task-Driven Narrative:** The agents' primary goal is to "run the company." Their interactions will be driven by high-level tasks or objectives (e.g., "Develop a new feature," "Launch a marketing campaign," "Plan a team offsite").
-*   **Autonomous Tool Use:** Agents must be able to use a variety of tools to accomplish their tasks. This is the core of the simulation's activity. Examples include:
-    *   **Code Execution:** Write, save, and execute code.
-    *   **Web Research:** Search the web for information.
-    *   **Social Media:** Post updates to a simulated Twitter feed.
-    *   **Financials:** Use a tool to "purchase" services or assets, affecting a virtual company budget.
+### 4.1. The AI "Company" & Agent Autonomy
+*   **Diverse Agent Personas:** The company will be staffed by a cast of AI agents with distinct roles, personalities, and capabilities (e.g., CEO, Project Manager, Frontend Developer, Backend Developer, Marketer, HR Manager).
+*   **Goal-Driven Narrative:** The simulation starts with a high-level goal (e.g., "Build a SaaS product for social media managers"). The agents' primary objective is to achieve this goal. Their interactions—from initial brainstorming to final product—will be emergent and unscripted.
+*   **Individual Task Management:** Each agent must maintain its own internal to-do list or task queue. This list drives their actions. An agent decides what to do next based on its own priorities, capabilities, and messages received from other agents.
+*   **Autonomous Tool Use:** Agents must be able to use a variety of tools to accomplish their tasks. This is the core of the simulation's activity. The toolset must be robust and versatile.
+    *   **Code Generation:** Write, save, and test new code.
+    *   **File System Access:** Read and write to files to manage a project codebase.
+    -   **Web Research:** Search the web for information (e.g., market research, technical documentation).
+    *   **Social Media:** Prepare content for a simulated Twitter feed.
+    -   **Task Management:** Agents must be able to add, remove, and reprioritize tasks on their own to-do lists and assign tasks to other agents.
 
 ### 4.2. The "Office" Interface (Slack/Teams Clone)
 *   **Modern UI:** The frontend will be a clean, modern, and responsive web application that closely mimics the look and feel of Slack or Microsoft Teams.
-*   **Channel-Based Communication:** Conversations will be organized into channels.
+*   **Organic Communication:** Conversations will be organized into channels and direct messages. Communication is not turn-based; agents can send messages whenever it is relevant to their current task or a message they have received.
     *   `#general`: A main channel for company-wide announcements and discussions.
-    *   `#random`: For off-topic or water-cooler style chats.
-    *   **Group Chats (Projects):** Temporary, topic-specific group chats for collaborating on a specific task (e.g., `#project-new-logo`).
-    *   **1-on-1 Direct Messages:** Agents must be able to have private conversations with each other.
+    *   `#engineering`: For technical discussions and code-related collaboration.
+    *   **Direct Messages:** Agents must be able to have private conversations with each other to ask questions, assign tasks, or collaborate.
 *   **Real-Time Updates:** The interface must update in real-time as agents send messages or perform actions.
-*   **Conversation History:** Users can scroll back and read the entire history of any channel or DM they have access to.
+*   **Conversation History:** Users can scroll back and read the entire history of any channel or DM.
 
 ### 4.3. User Experience & Observation
 *   **Passive Observation:** The primary user role is as an observer. Users can switch between channels and DMs to follow different threads of activity.
-*   **Agent Status:** Each agent will have a visible "status" that indicates their current activity (e.g., `Coding`, `In a meeting`, `Brainstorming`, `Tweeting`). This status should be updated automatically based on their actions.
-*   **Viewing Agent "Work":** When an agent uses a tool to create an artifact (like a piece of code or a marketing image), the user should be able to view that output. For example, a "Company Files" or "GitHub" tab could show files created by the programmer agent.
+*   **Agent Status & To-Do List:** Each agent will have a visible "status" indicating their current activity (e.g., `Coding`, `Researching`, `Replying to message`). Critically, the user must also be able to view each agent's current to-do list to understand their motivations and plans.
+*   **Viewing Agent "Work":** When an agent uses a tool to create an artifact (like a piece of code), the user should be able to view that output in a dedicated "Company Files" or "Codebase" section of the UI.
 
 ## 5. Non-Functional Requirements
 *   **Performance:** The UI must remain smooth and responsive, even with a high volume of agent messages.
-*   **Scalability:** The backend architecture should be designed to potentially support more agents, more complex tools, and in the future, multiple concurrent "companies."
+*   **Scalability:** The backend architecture should be designed to support more agents, more complex tools, and a more complex agent interaction model.
 *   **Security:** All user-facing components should be secure. API keys and other sensitive data must be managed through environment variables and not exposed.
 
 ## 6. Success Metrics

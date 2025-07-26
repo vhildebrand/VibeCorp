@@ -1,134 +1,113 @@
-# Project Sprint Plan: The AutoGen Startup Simulation
+# Project Sprint Plan: The Autonomous Startup Simulation
 
-This document breaks down the development work outlined in the `PRODUCT_REQUIREMENTS.md` and `TECHNICAL_DESIGN.md` into a series of two-week sprints. Each sprint has a clear goal and a set of deliverables.
-
----
-
-## Sprint 1: Backend Foundation & Core Agent Setup
-
-**Goal:** Establish the core Python backend, define the AI agents, and enable basic conversations. This sprint focuses on getting the "brains" of the operation running in a local environment.
-
-### Tasks:
-- [ ] **Project Setup:**
-    - [ ] Initialize Python virtual environment and install dependencies: `autogen-agentchat`, `fastapi`, `uvicorn`, `sqlalchemy`, `sqlmodel`, `websockets`.
-    - [ ] Set up the `.env` file for API keys.
-- [ ] **Agent Definition (`agents/agents.py`):**
-    - [ ] Create `ConversableAgent` instances for the CEO, Marketer, Programmer, and HR agents.
-    - [ ] Write detailed `system_message` prompts to define each agent's personality, role, and communication style.
-- [ ] **Database Models (`database/models.py`):**
-    - [ ] Define `SQLModel` tables for `Agent`, `Conversation`, `Message`, and `Task`.
-    - [ ] Create a database initialization script.
-- [ ] **Core Conversation Logic (`main.py`):**
-    - [ ] Implement a script to instantiate the agents.
-    - [ ] Create a `GroupChat` and a `GroupChatManager`.
-    - [ ] Implement a test function to trigger a conversation and verify that messages are being generated and saved to the database.
-
-**Deliverable:** A set of Python scripts that can be run from the terminal to demonstrate agents conversing and their interactions being persisted in a local SQLite database.
+This document breaks down the development work outlined in the revised `PRODUCT_REQUIREMENTS.md` and `TECHNICAL_DESIGN.md` into a series of focused sprints. The goal is to build a truly autonomous multi-agent simulation.
 
 ---
 
-## Sprint 2: API Layer & Agent Tooling
+## Sprint 1: The Asynchronous Core & Agent Autonomy
 
-**Goal:** Expose the agent simulation via a web API and empower agents with their first set of tools.
+**Goal:** Refactor the backend to replace the scheduler-based system with an asynchronous, agent-driven architecture. Each agent will run its own independent loop.
 
 ### Tasks:
-- [ ] **FastAPI Setup (`api/main.py`):**
-    - [ ] Create the main FastAPI application.
-    - [ ] Implement CORS middleware to allow frontend access.
-- [ ] **API Endpoints:**
-    - [ ] `GET /agents`: Returns a list of all defined agents from the database.
-    - [ ] `GET /conversations`: Returns a list of all conversations (e.g., `#general`).
-    - [ ] `GET /conversations/{conv_id}/messages`: Fetches the history for a specific conversation.
-    - [ ] `POST /tasks`: A stub endpoint that will eventually trigger a new agent task.
-- [ ] **Tool Definition (`company/tools.py`):**
-    - [ ] Define initial Python functions for tools: `post_to_twitter(message: str)` and `write_code_to_file(filename: str, code: str)`.
-- [ ] **Executor Agent:**
-    - [ ] Create a `UserProxyAgent` named `Executor`.
-    - [ ] Use `register_function` to link the tools to the `Executor` and the agents who can propose them.
-    - [ ] Modify the group chat to include the `Executor` to handle function calls.
+- [x] **Project Cleanup:**
+    - [x] Delete `agents/autonomous_scheduler.py` and `agents/contextual_scheduler.py`.
+    - [x] Remove all usage of the old schedulers from the codebase.
+- [x] **Database Refactor (`database/models.py`):**
+    - [x] Add the new `AgentTask` table to track individual agent to-do lists.
+    - [x] Remove the `conversation_members` table and simplify `conversations` to only represent channels.
+- [x] **New Agent Core (`agents/agent_manager.py`):**
+    - [x] Create a new `AgentManager` class responsible for initializing agents.
+    - [x] Implement the core `run_agent_loop(agent)` function. This is the asynchronous loop where each agent will check messages, consult its to-do list, and execute tasks.
+- [x] **Communication Bus (`api/main.py`):**
+    - [x] Create a central `asyncio.Queue` to act as the message bus for all agent communication.
+    - [x] Implement the `POST /simulation/start` endpoint to initialize the `AgentManager` and start the `run_agent_loop` for all agents as concurrent `asyncio` tasks.
+- [x] **Initial Agent Prompts (`agents/agents.py`):**
+    - [x] Write detailed `system_message` prompts for the initial set of agents (CEO, PM, Dev). The prompts must instruct the agents on how to use their to-do list and collaborate to achieve a high-level goal.
 
-**Deliverable:** A runnable FastAPI server. We can use `curl` or a tool like Postman to hit the API endpoints and retrieve data from the backend.
+**Deliverable:** ✅ A backend that can start and run a set of agents in parallel. We can't see them talk yet, but the core asynchronous loops will be running. We can verify this with logging.
 
 ---
 
-## Sprint 3: Frontend Scaffolding & UI Mockups
+## Sprint 2: Task Management & Basic Tooling
 
-**Goal:** Build the static structure of the React frontend, creating a visually appealing and intuitive Slack/Teams clone with mock data.
+**Goal:** Empower agents with the ability to manage their own tasks and perform basic actions like file I/O and web searches.
 
 ### Tasks:
-- [ ] **Component Architecture (`startup-simulator-ui/src/components/`):**
-    - [ ] Create the file structure for all components outlined in the TDD (`Layout`, `Sidebar`, `ChatPane`, `ChannelList`, `MessageList`, `AgentMessage`, etc.).
-- [ ] **State Management (Zustand):**
-    - [ ] Set up a Zustand store (`src/store.ts`) with slices for `agents`, `conversations`, and `messages`.
-- [ ] **UI Implementation:**
-    - [ ] Build out the static components using Tailwind CSS and mock data from the Zustand store.
-    - [ ] `Layout.tsx`: Implement the main two-column layout.
-    - [ ] `Sidebar.tsx`: Display lists of channels and DMs.
-    - [ ] `ChatPane.tsx`: Display a conversation from the mock data.
-    - [ ] `AgentMessage.tsx`: Style message bubbles differently based on the agent.
+- [x] **To-Do List Tools (`company/tools.py`):**
+    - [x] Create tools for agents to manage their own tasks: `add_task(title: str, description: str, priority: int)`, `complete_task(task_id: int)`, `get_my_todo_list() -> List[AgentTask]`.
+- [x] **Filesystem Tools (`company/tools.py`):**
+    - [x] Create tools for reading and writing files: `write_to_file(path: str, content: str)`, `read_file(path: str) -> str`, `list_files(path: str) -> List[str]`.
+- [x] **Web Search Tool (`company/tools.py`):**
+    - [x] Implement a `web_search(query: str) -> str` tool using an external library like `requests` or a search API.
+- [x] **Tool Integration:**
+    - [x] Make the tools available to the agents within their `run_agent_loop`.
+    - [x] Update the agent prompts to explicitly instruct them on how and when to use these new tools.
+- [x] **Agent-to-Agent Communication:**
+    - [x] Implement the logic for agents to send messages to the central `asyncio.Queue`.
+    - [x] The `run_agent_loop` should now process messages from the queue, allowing agents to react to each other.
 
-**Deliverable:** A fully styled, responsive React application that displays a mock conversation. It should look and feel like the final product, but with static data.
+**Deliverable:** ✅ Agents can now manage their own to-do lists, read/write files, and search the web. They can also send messages to each other, which we can observe through backend logging.
 
 ---
 
-## Sprint 4: Full-Stack Integration & Real-Time Updates
+## Sprint 3: Backend API & Frontend Integration
 
-**Goal:** Connect the frontend and backend, replacing mock data with live data and enabling real-time communication via WebSockets.
+**Goal:** Expose the state of the autonomous simulation via the API and connect the frontend to display agent activities in real-time.
 
 ### Tasks:
-- [ ] **API Integration:**
-    - [ ] In the React app, replace mock data by fetching from the FastAPI endpoints (`/agents`, `/conversations`, etc.) on initial load.
+- [ ] **API Endpoints (`api/main.py`):**
+    - [ ] Implement the new API endpoints defined in the technical design: `GET /agents`, `GET /agents/{agent_id}/tasks`, `GET /conversations/{conv_id}/messages`.
 - [ ] **Backend WebSocket (`api/main.py`):**
-    - [ ] Create a `/ws` WebSocket endpoint in FastAPI.
-    - [ ] Implement logic to broadcast new messages and agent status updates to all connected clients.
-- [ ] **Frontend WebSocket:**
-    - [ ] Implement a WebSocket client service in React to connect to the backend.
-    - [ ] When a message is received via WebSocket, update the Zustand store. This will cause the UI to re-render automatically.
-- [ ] **Task Initiation:**
-    - [ ] Fully implement the `POST /tasks` endpoint to kick off a new `GroupChat` session in the background.
-    - [ ] As the agents in that session converse, their messages should be broadcast over the WebSocket.
+    - [ ] Create a listener that reads from the `asyncio.Queue`.
+    - [ ] When a new message is added to the queue, broadcast it to all connected frontend clients via the `/ws` WebSocket.
+    - [ ] Broadcast updates when an agent's task list changes.
+- [ ] **Frontend State Management (`startup-simulator-ui/src/store.ts`):**
+    - [ ] Add `agentTasks` to the Zustand store.
+    - [ ] Implement the WebSocket client logic to listen for new messages and task updates and update the store accordingly.
+- [ ] **UI Implementation (`startup-simulator-ui/src/`):**
+    - [ ] Create the new `TodoList.tsx` component to display the contents of `agentTasks` for a selected agent.
+    - [ ] Integrate the `TodoList.tsx` component into the `AgentProfile.tsx` or a similar view.
 
-**Deliverable:** A fully functional web application. The frontend loads initial data via REST and then receives real-time updates for new messages via WebSockets.
+**Deliverable:** A fully connected application. The frontend displays conversations and agent to-do lists in real-time as the simulation runs on the backend.
 
 ---
 
-## Sprint 5: Advanced Features & Polish
+## Sprint 4: Advanced Agents & Simulation Polish
 
-**Goal:** Enhance the simulation's depth by adding features that allow for more complex agent interactions and better user observability.
+**Goal:** Refine agent behavior, expand the agent team, and improve the overall quality and believability of the simulation.
 
 ### Tasks:
-- [ ] **Advanced Communication:**
-    - [ ] Implement the backend routing logic to support multiple channels and 1-on-1 DMs.
-    - [ ] Update the UI to allow switching between these different conversations.
-- [ ] **Agent Status Updates:**
-    - [ ] When an agent decides to use a tool, update its status (e.g., "Penny is `Coding`"). Push this status change over the WebSocket.
-    - [ ] Display the agent's status in the UI (e.g., in the sidebar).
-- [ ] **"Company Files" Viewer:**
-    - [ ] Create a new API endpoint to list files created by agents.
-    - [ ] Create a new UI component that displays the contents of these files.
+- [ ] **New Agent Roles:**
+    - [ ] Add more specialized agents: a Frontend Developer, a Backend Developer, a Marketer, and an HR Manager.
+    - [ ] Write detailed system prompts and define specific toolsets for each new role.
+- [ ] **Code Execution & Testing:**
+    - [ ] Implement a secure tool for agents to execute the code they write, perhaps in a sandboxed environment.
+    - [ ] Create a `test_code(code: str) -> str` tool that uses a testing framework to validate code.
 - [ ] **Refine Agent Prompts:**
-    - [ ] Based on observed conversations, tweak the `system_message` prompts to improve narrative quality and agent behavior.
+    - [ ] Observe the simulation and iteratively refine the `system_message` for all agents to improve collaboration, reduce looping behavior, and enhance narrative quality.
+- [ ] **Error Handling & Resilience:**
+    - [ ] Improve the `run_agent_loop` to gracefully handle errors during tool execution or LLM calls, preventing a single agent failure from stopping the entire simulation.
 
-**Deliverable:** A more dynamic application where users can follow multiple conversation threads and have better insight into what the agents are actively doing.
+**Deliverable:** A much more robust and interesting simulation. Agents can now write, test, and (in theory) build a simple application. The narrative quality is significantly improved.
 
 ---
 
-## Sprint 6: Deployment & Final Touches
+## Sprint 5: Deployment & Final Touches
 
 **Goal:** Prepare the application for production and deploy it to the cloud.
 
 ### Tasks:
-- [ ] **Containerization:**
-    - [ ] Create a `Dockerfile` for the FastAPI backend.
+- [ ] **Containerization (`Dockerfile`):**
+    - [ ] Ensure the `Dockerfile` for the FastAPI backend is up-to-date with all new dependencies.
 - [ ] **CI/CD (GitHub Actions):**
-    - [ ] Create a workflow to automatically run tests and linting.
-    - [ ] Create a second workflow to build and deploy the frontend and backend when changes are pushed to `main`.
+    - [ ] Create a workflow to automatically run tests for the agent tools and backend API.
+    - [ ] Set up a deployment workflow to build and deploy the frontend and backend when changes are pushed to `main`.
 - [ ] **Deployment:**
-    - [ ] Deploy the React frontend to Netlify or Vercel.
-    - [ ] Deploy the backend container to a service like Google Cloud Run or AWS Fargate.
+    - [ ] Deploy the React frontend to Vercel.
+    - [ ] Deploy the backend container to a service like Google Cloud Run.
 - [ ] **Final Configuration:**
     - [ ] Set up production environment variables.
-    - [ ] Ensure the production database is configured and migrated.
+    - [ ] Configure the production database.
     - [ ] Verify that CORS is correctly configured for the production domains.
 
 **Deliverable:** The live, publicly accessible web application. 

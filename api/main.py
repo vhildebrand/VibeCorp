@@ -7,9 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlmodel import Session, select
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import aiohttp
+from contextlib import asynccontextmanager
+from fastapi import status
 
 from database.init_db import engine
 from database.models import Agent, Conversation, Message, Task, ConversationType, TaskStatus
+from agents.agent_context import agent_context_manager
+from database.init_db import init_database, engine
+from database.models import Agent, Conversation, Message, Task, TaskStatus, AgentMemory, AgentMemoryType, ConversationType, MessageType, ConversationMember
+from agents.agents import get_all_agents, get_agent_by_name, create_agents_with_tools
 
 # Load environment variables
 load_dotenv()
@@ -48,123 +55,53 @@ class WebSocketManager:
         for connection in disconnected:
             self.active_connections.discard(connection)
 
-# Create WebSocket manager instance
+# Global aiohttp session
+http_session: aiohttp.ClientSession | None = None
+
+# Global agent manager
+agent_manager = None
+
+# WebSocket Manager
 websocket_manager = WebSocketManager()
 
-# Create FastAPI app
-app = FastAPI(
-    title="AutoGen Startup Simulation API",
-    description="API for the AI agent startup simulation",
-    version="1.0.0"
-)
+# ==============================================================================
+# Global In-Memory Message Queue
+# This will be the central communication bus for agents
+# ==============================================================================
+message_queue = asyncio.Queue()
 
-# Wipe database for fresh debugging sessions
-async def wipe_database_for_debug():
-    """Wipe conversation data for fresh debugging session"""
-    print("🔄 Wiping database for fresh debug session...")
-    
-    from sqlmodel import delete
-    from database.models import Message, AgentMemory, AgentWorkSession, ConversationSummary, Task
-    
-    try:
-        with Session(engine) as session:
-            # Count existing data
-            message_count = len(session.exec(select(Message)).all())
-            memory_count = len(session.exec(select(AgentMemory)).all())
-            task_count = len(session.exec(select(Task)).all())
-            
-            print(f"📊 Clearing: {message_count} messages, {memory_count} memories, {task_count} tasks")
-            
-            # Delete all conversation data
-            session.exec(delete(Message))
-            session.exec(delete(AgentMemory))
-            session.exec(delete(AgentWorkSession))
-            session.exec(delete(ConversationSummary))
-            session.exec(delete(Task))
-            session.commit()
-            
-            print("✅ Database wiped clean for debugging!")
-            
-    except Exception as e:
-        print(f"⚠️  Database wipe error: {e}")
 
-# Setup DM conversations
-async def setup_dm_conversations():
-    """Ensure DM conversations exist between all agent pairs"""
-    try:
-        from itertools import combinations
-        from database.models import ConversationMember
-        
-        with Session(engine) as session:
-            agents = session.exec(select(Agent)).all()
-            dm_pairs = list(combinations(agents, 2))
-            created_count = 0
-            
-            for agent1, agent2 in dm_pairs:
-                names = sorted([agent1.name, agent2.name])
-                dm_name = f"DM: {names[0].replace('_', ' ')} & {names[1].replace('_', ' ')}"
-                
-                existing_dm = session.exec(
-                    select(Conversation).where(Conversation.name == dm_name).where(Conversation.type == ConversationType.DM)
-                ).first()
-                
-                if not existing_dm:
-                    dm_conversation = Conversation(
-                        name=dm_name, type=ConversationType.DM,
-                        description=f"Direct message conversation between {agent1.name.replace('_', ' ')} and {agent2.name.replace('_', ' ')}"
-                    )
-                    session.add(dm_conversation)
-                    session.commit()
-                    session.refresh(dm_conversation)
-                    
-                    member1 = ConversationMember(agent_id=agent1.id, conversation_id=dm_conversation.id)
-                    member2 = ConversationMember(agent_id=agent2.id, conversation_id=dm_conversation.id)
-                    session.add(member1)
-                    session.add(member2)
-                    session.commit()
-                    created_count += 1
-            
-            print(f"💌 DM conversations ready ({created_count} created)")
-            
-    except Exception as e:
-        print(f"⚠️  DM setup error: {e}")
+async def get_http_session():
+    """Get the global aiohttp session"""
+    return http_session
 
-# Start contextual scheduler when the app starts  
-@app.on_event("startup")
-async def startup_event():
-    """Initialize fresh debug session with contextual agents"""
-    print("🚀 Starting Fresh Debug Session - AutoGen API")
-    print("=" * 55)
-    
-    # Step 1: Wipe database for clean debugging
-    await wipe_database_for_debug()
-    
-    # Step 2: Setup DM conversations
-    await setup_dm_conversations()
-    
-    # Step 3: Start contextual scheduler
-    try:
-        from agents.contextual_scheduler import contextual_scheduler
-        # Start the scheduler in the background
-        asyncio.create_task(contextual_scheduler.start())
-        print("🤖 Contextual agent scheduler started!")
-        print("🎯 Debug config: 15-45s intervals, 70% DMs, 20 msg history")
-        print("=" * 55)
-    except Exception as e:
-        print(f"❌ Error starting contextual scheduler: {e}")
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Clean up when the app shuts down"""
-    print("🛑 Shutting down AutoGen Startup Simulation API...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage startup and shutdown events."""
+    global http_session
+    print("🚀 Server starting up...")
     
-    # Stop the contextual scheduler
-    try:
-        from agents.contextual_scheduler import contextual_scheduler
-        await contextual_scheduler.stop()
-        print("🤖 Contextual agent scheduler stopped!")
-    except Exception as e:
-        print(f"❌ Error stopping contextual scheduler: {e}")
+    # Initialize database
+    init_database()
+    
+    # Create aiohttp session
+    http_session = aiohttp.ClientSession()
+
+    yield
+
+    # Clean up resources
+    print("🛑 Server shutting down...")
+    if http_session:
+        await http_session.close()
+    
+    # Stop the agent manager if running
+    global agent_manager
+    if agent_manager and agent_manager.is_running():
+        await agent_manager.stop()
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Configure CORS for production and development
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
@@ -435,7 +372,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Helper function to broadcast new messages
 async def broadcast_new_message(message: Message, agent_name: str):
-    """Broadcast a new message to all connected WebSocket clients"""
+    """Broadcast a new message to all connected WebSocket clients."""
     await websocket_manager.broadcast({
         "type": "new_message",
         "data": {
@@ -451,32 +388,156 @@ async def broadcast_new_message(message: Message, agent_name: str):
 
 # Helper function to broadcast agent status updates
 async def broadcast_agent_status_update(agent_id: int, status: str):
-    """Broadcast agent status update to all connected WebSocket clients"""
+    """Broadcast an agent status update."""
     await websocket_manager.broadcast({
-        "type": "agent_status_update", 
-        "data": {
-            "agentId": agent_id,
-            "status": status
-        }
+        "type": "agent_status_update",
+        "agent_id": agent_id,
+        "status": status
     })
 
 # Helper function to broadcast task updates
 async def broadcast_task_update(task: Task):
-    """Broadcast task update to all connected WebSocket clients"""
+    """Broadcast a task update to all clients."""
     await websocket_manager.broadcast({
         "type": "task_update",
-        "data": {
+        "task": {
             "id": task.id,
             "title": task.title,
             "description": task.description,
             "status": task.status.value,
-            "conversationId": task.assigned_conversation_id,
-            "createdAt": task.created_at.isoformat()
+            "assigned_conversation_id": task.assigned_conversation_id
         }
     })
 
+# ==============================================================================
+# Global In-Memory Message Queue
+# This will be the central communication bus for agents
+# ==============================================================================
+message_queue = asyncio.Queue()
+
+# ==============================================================================
+# API Endpoints
+# ==============================================================================
+
+# Simulation Endpoints
+@app.post("/simulation/start", status_code=status.HTTP_202_ACCEPTED)
+async def start_simulation():
+    """
+    Starts the autonomous agent simulation.
+    Initializes the AgentManager and starts the agent loops.
+    """
+    global agent_manager
+    
+    if agent_manager and agent_manager.is_running():
+        raise HTTPException(status_code=400, detail="Simulation is already running.")
+    
+    try:
+        from agents.agent_manager import AgentManager
+        
+        agent_manager = AgentManager(message_queue)
+        asyncio.create_task(agent_manager.start())
+        
+        return {"message": "Agent simulation started in the background.", "status": "starting"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to start simulation: {str(e)}")
+
+
+@app.post("/simulation/stop", status_code=status.HTTP_202_ACCEPTED)
+async def stop_simulation():
+    """
+    Stops the autonomous agent simulation.
+    """
+    global agent_manager
+    
+    if not agent_manager or not agent_manager.is_running():
+        raise HTTPException(status_code=400, detail="Simulation is not running.")
+    
+    try:
+        await agent_manager.stop()
+        agent_manager = None
+        
+        return {"message": "Agent simulation stopped.", "status": "stopped"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to stop simulation: {str(e)}")
+
+
+@app.get("/simulation/status")
+async def get_simulation_status():
+    """Get the current status of the simulation."""
+    global agent_manager
+    
+    is_running = agent_manager and agent_manager.is_running()
+    
+    return {
+        "running": is_running,
+        "message": "Simulation is running" if is_running else "Simulation is stopped"
+    }
+
+# Agent Endpoints
+@app.get("/agents/{agent_id}/tasks")
+def get_agent_tasks(agent_id: int):
+    """Get the to-do list for a specific agent."""
+    try:
+        with Session(engine) as session:
+            # Verify agent exists
+            agent = session.exec(select(Agent).where(Agent.id == agent_id)).first()
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found")
+            
+            # Get agent's tasks
+            tasks = session.exec(
+                select(AgentTask)
+                .where(AgentTask.agent_id == agent_id)
+                .order_by(AgentTask.priority)
+            ).all()
+            
+            return {
+                "agent_id": agent_id,
+                "agent_name": agent.name,
+                "tasks": [
+                    {
+                        "id": task.id,
+                        "title": task.title,
+                        "description": task.description,
+                        "status": task.status.value,
+                        "priority": task.priority
+                    }
+                    for task in tasks
+                ]
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching agent tasks: {str(e)}")
+
+# Conversation Endpoints
+@app.get("/conversations/{conversation_id}/messages", response_model=List[Message])
+def get_conversation_messages(conversation_id: int):
+    """
+    Get the message history for a specific conversation.
+    """
+    with Session(engine) as session:
+        return session.exec(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.timestamp)
+        ).all()
+        
+
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
-    uvicorn.run(app, host=host, port=port)
+    # This allows running the app directly for development
+    # uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+    
+    # Example of how to start the app and run the simulation
+    # (for local testing without a separate process)
+    async def main():
+        config = uvicorn.Config("api.main:app", host="0.0.0.0", port=8000, log_level="info")
+        server = uvicorn.Server(config)
+        
+        # Start the server and the simulation concurrently
+        await server.serve()
+
+    asyncio.run(main())

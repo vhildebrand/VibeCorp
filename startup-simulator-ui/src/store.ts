@@ -260,12 +260,12 @@ const mockTasks: Task[] = [
 ];
 
 export const useAppStore = create<AppState>((set, get) => ({
-  // Initial state
-  agents: mockAgents,
-  conversations: mockConversations,
-  messages: mockMessages,
-  tasks: mockTasks,
-  activeConversationId: 1, // Start with #general selected
+  // Initial state - start with empty arrays, will be populated from API
+  agents: [],
+  conversations: [],
+  messages: [],
+  tasks: [],
+  activeConversationId: null, // Will be set after conversations load
   sidebarCollapsed: false,
   
   // Loading states
@@ -303,9 +303,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   })),
   
   addMessage: (message: Omit<Message, 'id'>) => set((state) => {
+    const existingIds = state.messages.map(m => m.id);
+    const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
     const newMessage: Message = {
       ...message,
-      id: Math.max(...state.messages.map(m => m.id)) + 1
+      id: maxId + 1
     };
     
     return {
@@ -361,7 +363,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       
       // If we have conversations and no active one is set, set the first one
-      if (updatedConversations.length > 0 && !state.activeConversationId) {
+      if (updatedConversations.length > 0 && state.activeConversationId === null) {
         get().setActiveConversation(updatedConversations[0].id);
       }
       
@@ -456,15 +458,31 @@ export const useAppStore = create<AppState>((set, get) => ({
         
         switch (message.type) {
           case 'new_message':
-            // Add new message to store
-            currentState.addMessage({
-              conversationId: message.data.conversationId,
-              agentId: message.data.agentId,
-              agentName: message.data.agentName,
-              content: message.data.content,
-              timestamp: message.data.timestamp,
-              type: message.data.type || 'message',
-            });
+            // Add new message to store with proper ID from backend
+            const messageData = message.data;
+            const newMessage: Message = {
+              id: messageData.id || Date.now(), // Use backend ID or fallback to timestamp
+              conversationId: messageData.conversationId,
+              agentId: messageData.agentId,
+              agentName: messageData.agentName,
+              content: messageData.content,
+              timestamp: messageData.timestamp,
+              type: messageData.type || 'message',
+            };
+            
+            // Add directly to messages array and update conversation
+            set((state) => ({
+              messages: [...state.messages, newMessage],
+              conversations: state.conversations.map(conv =>
+                conv.id === newMessage.conversationId
+                  ? { 
+                      ...conv, 
+                      lastMessageTime: newMessage.timestamp,
+                      unreadCount: conv.id === state.activeConversationId ? 0 : conv.unreadCount + 1
+                    }
+                  : conv
+              )
+            }));
             break;
             
           case 'agent_status_update':

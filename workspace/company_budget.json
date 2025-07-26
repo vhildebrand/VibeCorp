@@ -1,5 +1,5 @@
 {
-  "current_balance": 50000.0,
+  "current_balance": 20000.0,
   "transactions": [
     {
       "type": "expense",
@@ -35,6 +35,69 @@
       "description": "Fundraising round for product development initiatives.",
       "timestamp": "2025-07-26T19:42:44.200322",
       "balance_after": 50000.0
+    },
+    {
+      "type": "expense",
+      "amount": -10000,
+      "description": "Budget allocation for user feedback initiatives and community-building features.",
+      "timestamp": "2025-07-26T19:57:18.308729",
+      "balance_after": 40000.0
+    },
+    {
+      "type": "expense",
+      "amount": -5000,
+      "description": "Budget allocation for UI/UX enhancements and backend adjustments.",
+      "timestamp": "2025-07-26T19:57:29.534639",
+      "balance_after": 35000.0
+    },
+    {
+      "type": "expense",
+      "amount": -3000,
+      "description": "Budget allocation for team lunch to celebrate progress.",
+      "timestamp": "2025-07-26T19:57:37.137583",
+      "balance_after": 32000.0
+    },
+    {
+      "type": "expense",
+      "amount": -10000,
+      "description": "Budget allocation for user feedback initiatives and community-building features.",
+      "timestamp": "2025-07-26T19:59:39.917894",
+      "balance_after": 22000.0
+    },
+    {
+      "type": "expense",
+      "amount": -5000,
+      "description": "Budget allocation for tech debt audit and necessary refactors.",
+      "timestamp": "2025-07-26T19:59:47.635174",
+      "balance_after": 17000.0
+    },
+    {
+      "type": "expense",
+      "amount": -2000,
+      "description": "Budget allocation for team-building activities and wellness check-in.",
+      "timestamp": "2025-07-26T19:59:55.226352",
+      "balance_after": 15000.0
+    },
+    {
+      "type": "expense",
+      "amount": -5000,
+      "description": "Aggressive investment in UX research and prototyping tools.",
+      "timestamp": "2025-07-26T20:03:49.175877",
+      "balance_after": 10000.0
+    },
+    {
+      "type": "expense",
+      "amount": -10000,
+      "description": "Budget allocation for user feedback initiatives and community-building features.",
+      "timestamp": "2025-07-26T20:07:41.632685",
+      "balance_after": 0.0
+    },
+    {
+      "type": "revenue",
+      "amount": 20000,
+      "description": "Revenue generated from recent partnerships.",
+      "timestamp": "2025-07-26T20:07:53.993467",
+      "balance_after": 20000.0
     }
   ],
   "monthly_burn_rate": 15000.0
