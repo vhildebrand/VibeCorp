@@ -89,3 +89,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Agent workspace files (runtime generated)
+workspace/agents/*/search_*.json
+workspace/agents/*/tweets.json
+workspace/agents/*/shared_files/
+workspace/agents/*/test*
+workspace/search_results_*.json
+workspace/test*

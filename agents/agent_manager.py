@@ -12,6 +12,40 @@ from database.models import Agent, AgentTask, TaskStatus, Message, Conversation
 from agents.agents import get_agent_by_name, create_agents_with_tools
 from company.tools import AVAILABLE_TOOLS
 
+def get_superior_for_agent(role: str) -> str:
+    """Get the superior agent name for reporting completed tasks."""
+    hierarchy = {
+        "Programmer": "CeeCee_The_CEO",  # Programmers report to CEO
+        "Marketer": "CeeCee_The_CEO",    # Marketer reports to CEO  
+        "HR": "CeeCee_The_CEO",          # HR reports to CEO
+        "CEO": None                      # CEO has no superior
+    }
+    return hierarchy.get(role)
+
+def get_helper_for_task(role: str, task_title: str) -> str:
+    """Determine who can help with a specific task based on role and task type."""
+    task_lower = task_title.lower()
+    
+    # Technical tasks -> ask programmer
+    if any(keyword in task_lower for keyword in ["code", "technical", "architecture", "security", "implementation"]):
+        return "Penny_The_Programmer" if role != "Programmer" else "CeeCee_The_CEO"
+    
+    # Marketing tasks -> ask marketer  
+    elif any(keyword in task_lower for keyword in ["marketing", "social", "campaign", "brand", "content"]):
+        return "Mark_The_Marketer" if role != "Marketer" else "CeeCee_The_CEO"
+    
+    # HR/team tasks -> ask HR
+    elif any(keyword in task_lower for keyword in ["team", "hr", "employee", "satisfaction", "hiring"]):
+        return "Hannah_The_HR" if role != "HR" else "CeeCee_The_CEO"
+    
+    # Business/strategy tasks -> ask CEO
+    elif any(keyword in task_lower for keyword in ["strategy", "business", "market", "budget", "financial"]):
+        return "CeeCee_The_CEO" if role != "CEO" else "general"
+    
+    # Default: ask in general channel
+    else:
+        return "general"
+
 
 class AgentManager:
     """
@@ -100,19 +134,27 @@ async def run_agent_loop(agent_model: Agent, agent_instance, message_queue: asyn
             
             # Step 1: Check for new messages
             messages = await check_for_messages(agent_model, message_queue)
+            print(f"📨 {agent_model.name} found {len(messages)} messages")
             
             # Step 2: Get current to-do list
             todo_list = await get_agent_todo_list(agent_model)
+            print(f"📋 {agent_model.name} has {len(todo_list)} tasks: {[f'{t.status}:{t.title[:30]}' for t in todo_list[:3]]}")
             
             # Step 3: Decide on next action based on messages and todo list
             action = await decide_next_action(agent_model, agent_instance, messages, todo_list)
+            print(f"🎯 {agent_model.name} decided: {action.get('tool', 'no action') if action else 'no action'}")
             
             # Step 4: Execute the action
             if action:
                 await execute_action(agent_model, agent_instance, action, message_queue)
+            else:
+                print(f"⚠️ {agent_model.name} has no action to take")
             
-            # Wait before next iteration (agents think every 15-30 seconds)
-            await asyncio.sleep(asyncio.uniform(15, 30))
+            # Wait before next iteration (agents think every 5-10 seconds for faster testing)
+            import random
+            sleep_time = random.uniform(5, 10)
+            print(f"😴 {agent_model.name} sleeping for {sleep_time:.1f}s")
+            await asyncio.sleep(sleep_time)
 
         except asyncio.CancelledError:
             print(f"🛑 Agent {agent_model.name} loop cancelled.")
@@ -264,111 +306,262 @@ async def get_agent_todo_list(agent_model: Agent) -> List[AgentTask]:
 async def decide_next_action(agent_model: Agent, agent_instance, messages: List[Dict], todo_list: List[AgentTask]) -> Dict[str, Any]:
     """Decide what action the agent should take next."""
     
-    # Check if we should communicate with the team (occasionally)
+    # Purpose-driven communication - only communicate when there's a business need
     import random
     
-    # 10% chance to share an update if they've completed tasks recently
-    if random.random() < 0.1 and todo_list:
-        completed_tasks_count = len([t for t in todo_list if t.status == TaskStatus.COMPLETED])
-        if completed_tasks_count > 0:
-            return {
-                "type": "use_tool",
-                "tool": "share_update",
-                "args": {"agent_name": agent_model.name, "update": f"Just finished {completed_tasks_count} tasks! Making good progress on my work."}
-            }
+    # 1. Report completed high-priority tasks to superior
+    if todo_list:
+        completed_tasks = [t for t in todo_list if t.status == TaskStatus.COMPLETED and t.priority <= 2]
+        print(f"🎯 {agent_model.name} has {len(completed_tasks)} completed high-priority tasks")
+        if completed_tasks:
+            completed_task = completed_tasks[0]
+            superior = get_superior_for_agent(agent_model.role)
+            print(f"🎯 {agent_model.name} should report to superior: {superior}")
+            if superior:
+                print(f"📤 {agent_model.name} sending DM to {superior} about completed task")
+                return {
+                    "type": "use_tool",
+                    "tool": "send_direct_message",
+                    "args": {
+                        "agent_name": agent_model.name, 
+                        "recipient_agent": superior, 
+                        "message": f"Update: Completed '{completed_task.title}'. {completed_task.description}. Ready for next assignment."
+                    }
+                }
     
-    # 5% chance to ask for help if they have blocked tasks
-    if random.random() < 0.05 and todo_list:
+    # 2. Ask for help when blocked (immediately, not randomly)
+    if todo_list:
         blocked_tasks = [t for t in todo_list if t.status == TaskStatus.BLOCKED]
         if blocked_tasks:
             blocked_task = blocked_tasks[0]
-            return {
-                "type": "use_tool", 
-                "tool": "ask_for_help",
-                "args": {
-                    "agent_name": agent_model.name,
-                    "topic": blocked_task.title,
-                    "details": f"I'm stuck on this task: {blocked_task.description}. Any ideas?"
+            helper = get_helper_for_task(agent_model.role, blocked_task.title)
+            if helper == "general":
+                return {
+                    "type": "use_tool",
+                    "tool": "ask_for_help",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "topic": blocked_task.title,
+                        "details": f"Blocked on '{blocked_task.title}': {blocked_task.description}. Need guidance to proceed."
+                    }
                 }
-            }
+            else:
+                return {
+                    "type": "use_tool",
+                    "tool": "send_direct_message",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "recipient_agent": helper,
+                        "message": f"Need help with '{blocked_task.title}': {blocked_task.description}. Could you clarify requirements or dependencies?"
+                    }
+                }
     
-    # Most of the time, focus on work
-    if todo_list:
+    # 3. CEO assigns new tasks when they have capacity and others need work
+    if agent_model.role == "CEO" and todo_list and not any(t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] for t in todo_list):
+        # CEO has completed their tasks, should delegate new work
+        return {
+            "type": "use_tool",
+            "tool": "assign_task_to_agent",
+            "args": {
+                "assigner_name": agent_model.name,
+                "agent_name": "Penny_The_Programmer",  # Could be made smarter based on workload
+                "title": "Implement priority feature from market research",
+                "description": "Based on completed market analysis, develop the highest priority feature identified",
+                "priority": 1
+            }
+        }
+    
+    # Focus on work only if there are pending/in-progress tasks AND no communication needs
+    if todo_list and any(t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] for t in todo_list):
         # Work on the highest priority task
         current_task = todo_list[0]
+        print(f"🎯 {agent_model.name} working on: '{current_task.title}' (status: {current_task.status})")
         
         # Determine what action to take based on the task and agent role
+        # Reduce web searches and add more diverse actions
         if agent_model.role == "CEO":
-            if "budget" in current_task.title.lower():
+            if "budget" in current_task.title.lower() or "financial" in current_task.title.lower():
                 return {
                     "type": "use_tool",
                     "tool": "manage_budget",
                     "args": {"action": "view"},
                     "task_id": current_task.id
                 }
-            elif "research" in current_task.title.lower():
+            elif "research" in current_task.title.lower() or "market" in current_task.title.lower():
+                # Only research if it's specifically a research task
                 return {
                     "type": "use_tool", 
                     "tool": "web_search",
-                    "args": {"query": "startup market opportunities 2024"},
+                    "args": {"agent_name": agent_model.name, "query": f"{current_task.title[:50]}"},
                     "task_id": current_task.id
                 }
-                
-        elif agent_model.role == "Marketer":
-            if "social media" in current_task.title.lower():
-                return {
-                    "type": "use_tool",
-                    "tool": "post_to_twitter",
-                    "args": {"message": "🚀 VibeCorp is revolutionizing the tech space! Stay tuned for amazing updates! #Innovation #TechStartup #VibeCorp"},
-                    "task_id": current_task.id
-                }
-            elif "research" in current_task.title.lower():
-                return {
-                    "type": "use_tool",
-                    "tool": "web_search", 
-                    "args": {"query": "social media marketing trends 2024"},
-                    "task_id": current_task.id
-                }
-                
-        elif agent_model.role == "Programmer":
-            if "documentation" in current_task.title.lower():
+            else:
+                # CEO fallback: create strategic documents instead of web search
                 return {
                     "type": "use_tool",
                     "tool": "write_to_file",
                     "args": {
-                        "path": "docs/architecture.md",
-                        "content": "# VibeCorp System Architecture\n\nThis document outlines the technical architecture of our platform.\n\n## Components\n- Frontend: React with TypeScript\n- Backend: FastAPI with Python\n- Database: PostgreSQL\n- Agent System: Custom autonomous agents\n"
+                        "agent_name": agent_model.name,
+                        "path": f"strategy/{current_task.title.lower().replace(' ', '_')}.md",
+                        "content": f"# {current_task.title}\n\n{current_task.description}\n\n## Strategic Approach\n- Priority: {current_task.priority}\n- Status: In Progress\n- Next Steps: [To be defined]\n",
+                        "location": "personal"
                     },
                     "task_id": current_task.id
                 }
-            elif "security" in current_task.title.lower():
+                
+        elif agent_model.role == "Marketer":
+            if "social" in current_task.title.lower() or "marketing" in current_task.title.lower() or "campaign" in current_task.title.lower():
+                return {
+                    "type": "use_tool",
+                    "tool": "write_tweet",
+                    "args": {"agent_name": agent_model.name, "message": "🚀 VibeCorp is revolutionizing the tech space! Stay tuned for amazing updates! #Innovation #TechStartup #VibeCorp"},
+                    "task_id": current_task.id
+                }
+            elif "research" in current_task.title.lower() or "trend" in current_task.title.lower():
+                return {
+                    "type": "use_tool",
+                    "tool": "web_search", 
+                    "args": {"agent_name": agent_model.name, "query": "social media marketing 2024"},
+                    "task_id": current_task.id
+                }
+            else:
+                # Marketer fallback: create content
+                return {
+                    "type": "use_tool",
+                    "tool": "write_tweet",
+                    "args": {"agent_name": agent_model.name, "message": f"📱 Working on {current_task.title}! Exciting things coming from VibeCorp! #Marketing #Innovation"},
+                    "task_id": current_task.id
+                }
+                
+        elif agent_model.role == "Programmer":
+            if "documentation" in current_task.title.lower() or "document" in current_task.title.lower():
+                return {
+                    "type": "use_tool",
+                    "tool": "write_to_file",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "path": "docs/architecture.md",
+                        "content": f"# VibeCorp System Architecture\n\nThis document outlines the technical architecture of our platform.\n\n## Task: {current_task.title}\n{current_task.description}\n\n## Components\n- Frontend: React with TypeScript\n- Backend: FastAPI with Python\n- Database: PostgreSQL\n- Agent System: Custom autonomous agents\n",
+                        "location": "project"
+                    },
+                    "task_id": current_task.id
+                }
+            elif "research" in current_task.title.lower() and ("security" in current_task.title.lower() or "best practices" in current_task.title.lower()):
+                # Only do web search for explicit research tasks
                 return {
                     "type": "use_tool",
                     "tool": "web_search",
-                    "args": {"query": "API security best practices 2024"},
+                    "args": {"agent_name": agent_model.name, "query": f"{current_task.title[:50]}"},
+                    "task_id": current_task.id
+                }
+            else:
+                # Programmer fallback: create code/implementation files
+                return {
+                    "type": "use_tool",
+                    "tool": "write_to_file",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "path": f"code/{current_task.title.lower().replace(' ', '_')}.py",
+                        "content": f"# {current_task.title}\n# {current_task.description}\n\ndef main():\n    \"\"\"Implementation for {current_task.title}\"\"\"\n    # TODO: Implement {current_task.title}\n    pass\n\nif __name__ == '__main__':\n    main()\n",
+                        "location": "personal"
+                    },
                     "task_id": current_task.id
                 }
                 
         elif agent_model.role == "HR":
-            if "team building" in current_task.title.lower():
+            if "team" in current_task.title.lower() or "building" in current_task.title.lower():
                 return {
                     "type": "use_tool",
                     "tool": "manage_budget",
                     "args": {"action": "view"},
                     "task_id": current_task.id
                 }
-            elif "satisfaction" in current_task.title.lower():
+            elif "research" in current_task.title.lower() and ("satisfaction" in current_task.title.lower() or "survey" in current_task.title.lower()):
+                # Only research for explicit research tasks
                 return {
                     "type": "use_tool",
                     "tool": "web_search",
-                    "args": {"query": "employee satisfaction survey best practices"},
+                    "args": {"agent_name": agent_model.name, "query": f"{current_task.title[:50]}"},
+                    "task_id": current_task.id
+                }
+            else:
+                # HR fallback: create HR documents and policies
+                return {
+                    "type": "use_tool",
+                    "tool": "write_to_file",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "path": f"hr_policies/{current_task.title.lower().replace(' ', '_')}.md",
+                        "content": f"# {current_task.title}\n\n{current_task.description}\n\n## HR Policy Framework\n- Objective: {current_task.title}\n- Priority Level: {current_task.priority}\n- Implementation Status: In Progress\n\n## Key Considerations\n- Employee wellbeing\n- Company culture\n- Legal compliance\n- Performance metrics\n",
+                        "location": "personal"
+                    },
                     "task_id": current_task.id
                 }
     
-    # If no specific action determined, have the agent check their todo list
+    # If no specific action determined, try to communicate or check todo list
+    # If they have completed tasks, they're more likely to share updates
+    if todo_list and any(t.status == TaskStatus.COMPLETED for t in todo_list):
+        if random.random() < 0.7:  # 70% chance to share completion update
+            completed_tasks = [t for t in todo_list if t.status == TaskStatus.COMPLETED]
+            completed_task = completed_tasks[0]
+            return {
+                "type": "use_tool",
+                "tool": "share_update",
+                "args": {"agent_name": agent_model.name, "update": f"Great news! I just completed '{completed_task.title}'. What should I focus on next?"}
+            }
+    
+    # If agent has no pending/in-progress tasks, create meaningful follow-up work instead of just checking todo list
+    if not todo_list or not any(t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] for t in todo_list):
+        # Create role-appropriate follow-up tasks instead of endless todo list checking
+        if agent_model.role == "CEO":
+            return {
+                "type": "use_tool",
+                "tool": "add_task",
+                "args": {
+                    "agent_name": agent_model.name,
+                    "title": "Review team progress and strategic priorities",
+                    "description": "Check on team progress, identify bottlenecks, and set strategic direction for next phase",
+                    "priority": 2
+                }
+            }
+        elif agent_model.role == "Programmer":
+            return {
+                "type": "use_tool",
+                "tool": "add_task", 
+                "args": {
+                    "agent_name": agent_model.name,
+                    "title": "Code review and optimization",
+                    "description": "Review existing code, identify optimization opportunities, and improve system performance",
+                    "priority": 3
+                }
+            }
+        elif agent_model.role == "Marketer":
+            return {
+                "type": "use_tool",
+                "tool": "add_task",
+                "args": {
+                    "agent_name": agent_model.name,
+                    "title": "Content creation and brand development",
+                    "description": "Create engaging content, develop brand messaging, and plan marketing campaigns",
+                    "priority": 2
+                }
+            }
+        elif agent_model.role == "HR":
+            return {
+                "type": "use_tool",
+                "tool": "add_task",
+                "args": {
+                    "agent_name": agent_model.name,
+                    "title": "Team wellness and culture assessment",
+                    "description": "Assess team morale, identify culture improvement opportunities, and plan team building initiatives",
+                    "priority": 3
+                }
+            }
+    
+    # Otherwise, check their todo list (but this should be rare now)
     return {
         "type": "use_tool",
-        "tool": "get_my_todo_list",
+        "tool": "get_my_todo_list", 
         "args": {"agent_name": agent_model.name}
     }
 
@@ -385,7 +578,12 @@ async def execute_action(agent_model: Agent, agent_instance, action: Dict[str, A
                 tool_func = AVAILABLE_TOOLS[tool_name]
                 
                 # Execute the tool
-                if tool_name in ["add_task", "complete_task", "get_my_todo_list", "update_task_status"]:
+                tools_needing_agent_name = [
+                    "add_task", "complete_task", "get_my_todo_list", "update_task_status",
+                    "write_to_file", "read_file", "list_files", "write_tweet",
+                    "share_file_with_agent", "copy_to_project"
+                ]
+                if tool_name in tools_needing_agent_name:
                     # These tools need the agent name
                     if "agent_name" not in tool_args:
                         tool_args["agent_name"] = agent_model.name
@@ -395,7 +593,7 @@ async def execute_action(agent_model: Agent, agent_instance, action: Dict[str, A
                 
                 # If this action was for a specific task, mark it as in progress or completed
                 if "task_id" in action:
-                    await update_task_progress(action["task_id"])
+                    await update_task_progress(action["task_id"], tool_name)
                 
                 # Broadcast the action result as a message
                 await broadcast_agent_action(agent_model, tool_name, result, message_queue)
@@ -407,14 +605,41 @@ async def execute_action(agent_model: Agent, agent_instance, action: Dict[str, A
         print(f"❌ Error executing action for {agent_model.name}: {e}")
 
 
-async def update_task_progress(task_id: int):
-    """Update a task's progress."""
+async def update_task_progress(task_id: int, tool_name: str):
+    """Update a task's progress and potentially complete it."""
     with Session(engine) as session:
         task = session.exec(select(AgentTask).where(AgentTask.id == task_id)).first()
-        if task and task.status == TaskStatus.PENDING:
+        if not task:
+            return
+            
+        # Move from pending to in_progress
+        if task.status == TaskStatus.PENDING:
             task.status = TaskStatus.IN_PROGRESS
             session.add(task)
             session.commit()
+            print(f"📋 Task {task_id} marked as IN_PROGRESS")
+            
+        # After working on a task, there's a chance to complete it
+        elif task.status == TaskStatus.IN_PROGRESS:
+            # Some tools indicate task completion
+            completion_tools = ["write_to_file", "post_to_twitter", "manage_budget", "web_search"]
+            
+            # 30% chance to complete task after working on it, 80% if using completion tools
+            import random
+            completion_chance = 0.8 if tool_name in completion_tools else 0.3
+            
+            if random.random() < completion_chance:
+                task.status = TaskStatus.COMPLETED
+                session.add(task)
+                session.commit()
+                print(f"✅ Task {task_id} marked as COMPLETED: {task.title}")
+                
+                # Broadcast task completion
+                try:
+                    from api.main import broadcast_task_list_update
+                    await broadcast_task_list_update(task.agent_id)
+                except ImportError:
+                    pass
             
             # Broadcast task list update
             try:
