@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { apiService } from '../services/api';
+import { 
+  RefreshCw, 
+  Folder, 
+  File, 
+  FileText, 
+  FileCode, 
+  FileJson, 
+  FileImage,
+  ArrowUp,
+  Loader2
+} from 'lucide-react';
 
 interface FileItem {
   name: string;
@@ -93,8 +103,8 @@ const WorkspaceBrowser: React.FC = () => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
 
-  const getFileIcon = (item: FileItem): string => {
-    if (item.type === 'directory') return '📁';
+  const getFileIcon = (item: FileItem) => {
+    if (item.type === 'directory') return Folder;
     
     const extension = item.name.split('.').pop()?.toLowerCase();
     switch (extension) {
@@ -102,23 +112,22 @@ const WorkspaceBrowser: React.FC = () => {
       case 'ts':
       case 'jsx':
       case 'tsx':
-        return '📄';
-      case 'json':
-        return '📋';
-      case 'md':
-        return '📝';
       case 'py':
-        return '🐍';
-      case 'html':
-        return '🌐';
-      case 'css':
-        return '🎨';
+        return FileCode;
+      case 'json':
+        return FileJson;
+      case 'md':
       case 'txt':
-        return '📄';
       case 'log':
-        return '📊';
+        return FileText;
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'gif':
+      case 'svg':
+        return FileImage;
       default:
-        return '📄';
+        return File;
     }
   };
 
@@ -139,9 +148,7 @@ const WorkspaceBrowser: React.FC = () => {
               className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
               title="Refresh"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <RefreshCw className="w-4 h-4" />
             </button>
           </div>
           
@@ -174,7 +181,7 @@ const WorkspaceBrowser: React.FC = () => {
         <div className="flex-1 overflow-y-auto">
           {loading && (
             <div className="p-4 text-center text-gray-400">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+              <Loader2 className="w-8 h-8 animate-spin mx-auto" />
               <p className="mt-2">Loading...</p>
             </div>
           )}
@@ -193,40 +200,43 @@ const WorkspaceBrowser: React.FC = () => {
                   onClick={navigateUp}
                   className="w-full text-left p-2 rounded hover:bg-gray-800 flex items-center text-gray-400 hover:text-white"
                 >
-                  <span className="mr-3">⬆️</span>
+                  <ArrowUp className="w-4 h-4 mr-3" />
                   <span>..</span>
                 </button>
               )}
 
               {/* Directory items */}
-              {directoryListing.items.map((item) => (
-                <button
-                  key={item.path}
-                  onClick={() => {
-                    if (item.type === 'directory') {
-                      navigateToDirectory(item.path);
-                    } else {
-                      loadFile(item.path);
-                    }
-                  }}
-                  className="w-full text-left p-2 rounded hover:bg-gray-800 flex items-center justify-between group"
-                >
-                  <div className="flex items-center min-w-0">
-                    <span className="mr-3 text-lg">{getFileIcon(item)}</span>
-                    <span className="truncate group-hover:text-white">{item.name}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 ml-2">
-                    {item.type === 'file' && (
-                      <>
-                        <span>{formatFileSize(item.size)}</span>
-                        {item.modified && (
-                          <span className="ml-2">{formatDate(item.modified)}</span>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </button>
-              ))}
+              {directoryListing.items.map((item) => {
+                const IconComponent = getFileIcon(item);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => {
+                      if (item.type === 'directory') {
+                        navigateToDirectory(item.path);
+                      } else {
+                        loadFile(item.path);
+                      }
+                    }}
+                    className="w-full text-left p-2 rounded hover:bg-gray-800 flex items-center justify-between group"
+                  >
+                    <div className="flex items-center min-w-0">
+                      <IconComponent className="w-4 h-4 mr-3 text-blue-400" />
+                      <span className="truncate group-hover:text-white">{item.name}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 ml-2">
+                      {item.type === 'file' && (
+                        <>
+                          <span>{formatFileSize(item.size)}</span>
+                          {item.modified && (
+                            <span className="ml-2">{formatDate(item.modified)}</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
 
               {directoryListing.items.length === 0 && (
                 <div className="p-4 text-center text-gray-500">
@@ -256,7 +266,7 @@ const WorkspaceBrowser: React.FC = () => {
             <div className="flex-1 overflow-auto">
               {selectedFile.type === 'binary' ? (
                 <div className="p-4 text-center text-gray-400">
-                  <div className="text-6xl mb-4">📄</div>
+                  <File className="w-16 h-16 mx-auto mb-4 text-gray-600" />
                   <p>{selectedFile.message}</p>
                   <p className="text-sm mt-2">File size: {formatFileSize(selectedFile.size)}</p>
                 </div>
@@ -270,7 +280,7 @@ const WorkspaceBrowser: React.FC = () => {
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">
             <div className="text-center">
-              <div className="text-6xl mb-4">📁</div>
+              <Folder className="w-16 h-16 mx-auto mb-4 text-gray-600" />
               <p>Select a file to view its contents</p>
             </div>
           </div>

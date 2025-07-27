@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../store';
+import { 
+  Clock, 
+  Play, 
+  CheckCircle, 
+  XCircle, 
+  RefreshCw, 
+  Users, 
+  User,
+  BarChart3,
+  Loader2
+} from 'lucide-react';
 
 interface TaskNode {
   id: number;
@@ -21,7 +32,7 @@ interface TaskGraph {
 }
 
 const TaskGraphVisualizer: React.FC = () => {
-  const { agents, selectedAgentId } = useAppStore();
+  const { selectedAgentId } = useAppStore();
   const [taskGraphs, setTaskGraphs] = useState<TaskGraph[]>([]);
   const [selectedAgentGraph, setSelectedAgentGraph] = useState<TaskGraph | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -79,18 +90,18 @@ const TaskGraphVisualizer: React.FC = () => {
     }
   };
 
-  const getStatusIcon = (status: string): string => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return '⏳';
+        return Clock;
       case 'in_progress':
-        return '🔄';
+        return Play;
       case 'completed':
-        return '✅';
+        return CheckCircle;
       case 'blocked':
-        return '🚫';
+        return XCircle;
       default:
-        return '❓';
+        return Clock;
     }
   };
 
@@ -101,6 +112,8 @@ const TaskGraphVisualizer: React.FC = () => {
   };
 
   const renderTaskNode = (node: TaskNode, isRoot: boolean = false) => {
+    const StatusIcon = getStatusIcon(node.status);
+    
     return (
       <div
         key={node.id}
@@ -110,7 +123,7 @@ const TaskGraphVisualizer: React.FC = () => {
         title={node.description}
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-lg">{getStatusIcon(node.status)}</span>
+          <StatusIcon className="w-5 h-5 text-white" />
           <span className={`text-xs font-bold ${getPriorityColor(node.priority)}`}>
             P{node.priority}
           </span>
@@ -149,7 +162,7 @@ const TaskGraphVisualizer: React.FC = () => {
     if (graph.nodes.length === 0) {
       return (
         <div className="text-center text-gray-400 py-8">
-          <div className="text-4xl mb-4">📋</div>
+          <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-600" />
           <p>No tasks found for {graph.agent_name}</p>
         </div>
       );
@@ -168,12 +181,17 @@ const TaskGraphVisualizer: React.FC = () => {
         
         {/* Task Statistics */}
         <div className="grid grid-cols-4 gap-2 mb-4">
-          {['pending', 'in_progress', 'completed', 'blocked'].map(status => {
+          {[
+            { status: 'pending', icon: Clock },
+            { status: 'in_progress', icon: Play },
+            { status: 'completed', icon: CheckCircle },
+            { status: 'blocked', icon: XCircle }
+          ].map(({ status, icon: Icon }) => {
             const count = graph.nodes.filter(n => n.status === status).length;
             return (
               <div key={status} className={`p-2 rounded text-center ${getStatusColor(status)}`}>
-                <div className="text-lg">{getStatusIcon(status)}</div>
-                <div className="text-xs">{count}</div>
+                <Icon className="w-5 h-5 mx-auto text-white" />
+                <div className="text-xs mt-1">{count}</div>
               </div>
             );
           })}
@@ -204,23 +222,25 @@ const TaskGraphVisualizer: React.FC = () => {
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setViewMode('all')}
-              className={`px-3 py-1 rounded text-sm ${
+              className={`px-3 py-1 rounded text-sm flex items-center ${
                 viewMode === 'all' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
             >
+              <Users className="w-4 h-4 mr-1" />
               All Agents
             </button>
             <button
               onClick={() => setViewMode('agent')}
-              className={`px-3 py-1 rounded text-sm ${
+              className={`px-3 py-1 rounded text-sm flex items-center ${
                 viewMode === 'agent' 
                   ? 'bg-blue-600 text-white' 
                   : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
               }`}
               disabled={!selectedAgentId}
             >
+              <User className="w-4 h-4 mr-1" />
               Selected Agent
             </button>
             <button
@@ -234,9 +254,7 @@ const TaskGraphVisualizer: React.FC = () => {
               className="p-2 rounded hover:bg-gray-700 text-gray-400 hover:text-white"
               title="Refresh"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <RefreshCw className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -246,7 +264,7 @@ const TaskGraphVisualizer: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4">
         {loading && (
           <div className="text-center text-gray-400 py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+            <Loader2 className="w-8 h-8 animate-spin mx-auto" />
             <p className="mt-2">Loading task graphs...</p>
           </div>
         )}
@@ -263,7 +281,7 @@ const TaskGraphVisualizer: React.FC = () => {
               <div className="space-y-6">
                 {taskGraphs.length === 0 ? (
                   <div className="text-center text-gray-400 py-8">
-                    <div className="text-4xl mb-4">📊</div>
+                    <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-600" />
                     <p>No task graphs available</p>
                   </div>
                 ) : (
@@ -280,7 +298,7 @@ const TaskGraphVisualizer: React.FC = () => {
               <>
                 {!selectedAgentId ? (
                   <div className="text-center text-gray-400 py-8">
-                    <div className="text-4xl mb-4">👤</div>
+                    <User className="w-12 h-12 mx-auto mb-4 text-gray-600" />
                     <p>Select an agent to view their task graph</p>
                   </div>
                 ) : selectedAgentGraph ? (
@@ -289,7 +307,7 @@ const TaskGraphVisualizer: React.FC = () => {
                   </div>
                 ) : (
                   <div className="text-center text-gray-400 py-8">
-                    <div className="text-4xl mb-4">📋</div>
+                    <BarChart3 className="w-12 h-12 mx-auto mb-4 text-gray-600" />
                     <p>No task graph data available</p>
                   </div>
                 )}

@@ -468,15 +468,20 @@ def generate_subtasks_for_task(task: AgentTask, agent_role: str) -> List[Dict[st
 
 
 def should_complete_task(task: AgentTask, agent_role: str) -> bool:
-    """Determine if a leaf task should be marked as complete based on heuristics."""
+    """
+    Determine if a leaf task should be marked as complete based on heuristics.
+    This provides an "innate sense of done-ness" for agents.
+    """
     task_title = task.title.lower()
-    task_description = task.description.lower()
     
-    # Simple heuristics for task completion - in a real system, this could be more sophisticated
-    # For now, we'll use a simple approach: if the task has been in progress and involves
-    # creating something specific, we'll assume it's complete after some work has been done
+    # Special handling for CEO brainstorming tasks - these should NOT auto-complete
+    # They need to actually result in business decisions and task assignments
+    if agent_role == "CEO" and ("brainstorm" in task_title or "initiate" in task_title):
+        # CEO brainstorming tasks are only complete when they've made a business decision
+        # This should be handled by the specific CEO logic, not auto-completion
+        return False
     
-    # Tasks that are typically one-shot activities
+    # One-shot deliverable tasks are typically complete after being worked on
     one_shot_keywords = [
         "design", "create", "write", "implement", "build", "set up", "configure",
         "research", "plan", "define", "document", "test"
@@ -486,8 +491,8 @@ def should_complete_task(task: AgentTask, agent_role: str) -> bool:
     if any(keyword in task_title for keyword in one_shot_keywords):
         return True
     
-    # For communication or ongoing tasks, they're complete after one interaction
-    communication_keywords = ["message", "email", "call", "meeting", "discuss", "brainstorm"]
+    # For regular communication tasks (not CEO brainstorming), they're complete after one interaction
+    communication_keywords = ["message", "email", "call", "meeting", "discuss"]
     if any(keyword in task_title for keyword in communication_keywords):
         return True
     

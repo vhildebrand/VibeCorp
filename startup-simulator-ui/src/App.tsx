@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
-import { useAppStore } from './store';
+import { useEffect } from 'react';
 import Layout from './components/Layout';
+import { useAppStore } from './store';
 
 function App() {
   const { loadInitialData, connectWebSocket, disconnectWebSocket, error } = useAppStore();

@@ -94,7 +94,7 @@ const TodoList: React.FC<TodoListProps> = ({ agentId, className = '' }) => {
   const completedTasks = tasks.filter(t => t.status === 'completed');
   const blockedTasks = tasks.filter(t => t.status === 'blocked');
 
-  const renderTaskSection = (title: string, tasks: AgentTask[], collapsed = false) => {
+  const renderTaskSection = (title: string, tasks: AgentTask[]) => {
     if (tasks.length === 0) return null;
 
     return (

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Agent, Conversation, Message, Task } from '../store';
+import type { Agent, Conversation, Message } from '../store';
 
 // API base URL - use environment variable or default to localhost
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -58,27 +58,9 @@ const transformAgent = (apiAgent: ApiAgent): Agent => ({
   role: apiAgent.role,
   persona: apiAgent.persona,
   status: apiAgent.status as Agent['status'],
-  avatar: getAgentAvatar(apiAgent.name),
+  avatar: '', // No longer using emoji avatars
   color: getAgentColor(apiAgent.name),
 });
-
-// Helper function to get agent avatar
-const getAgentAvatar = (name: string): string => {
-  switch (name) {
-    case 'CeeCee_The_CEO':
-      return '👩‍💼';
-    case 'Marty_The_Marketer':
-      return '📱';
-    case 'Penny_The_Programmer':
-      return '💻';
-    case 'Paige_The_Programmer':
-      return '🔒'; // Security-focused programmer
-    case 'Herb_From_HR':
-      return '🤝';
-    default:
-      return '🤖';
-  }
-};
 
 // Helper function to get agent color
 const getAgentColor = (name: string): string => {

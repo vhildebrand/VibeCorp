@@ -102,43 +102,44 @@ interface AppState {
   disconnectWebSocket: () => void;
 }
 
-// Mock data
+// Mock data for development - commented out to avoid TS warnings
+/*
 const mockAgents: Agent[] = [
   {
     id: 1,
     name: 'CeeCee_The_CEO',
     role: 'CEO',
-    persona: 'Overly enthusiastic, buzzword-loving CEO',
-    status: 'in_meeting',
+    persona: 'A visionary leader who thinks big and makes bold decisions. Always pushing for innovation and growth.',
+    status: 'idle',
     avatar: '👩‍💼',
-    color: 'text-blue-400'
+    color: '#3B82F6'
   },
   {
     id: 2,
     name: 'Marty_The_Marketer',
-    role: 'Marketer', 
-    persona: 'Social media obsessed marketer',
+    role: 'Marketer',
+    persona: 'A creative and energetic marketer who loves crafting compelling campaigns and engaging with audiences.',
     status: 'tweeting',
     avatar: '📱',
-    color: 'text-green-400'
+    color: '#10B981'
   },
   {
     id: 3,
     name: 'Penny_The_Programmer',
     role: 'Programmer',
-    persona: 'Pragmatic, slightly sarcastic programmer',
+    persona: 'A skilled developer who loves solving complex problems and building elegant solutions.',
     status: 'coding',
     avatar: '💻',
-    color: 'text-red-400'
+    color: '#EF4444'
   },
   {
     id: 4,
     name: 'Herb_From_HR',
     role: 'HR',
-    persona: 'Team-building obsessed HR representative',
-    status: 'idle',
+    persona: 'An overly friendly HR representative who turns everything into a team-building exercise.',
+    status: 'in_meeting',
     avatar: '🤝',
-    color: 'text-yellow-400'
+    color: '#F59E0B'
   }
 ];
 
@@ -146,137 +147,135 @@ const mockConversations: Conversation[] = [
   {
     id: 1,
     name: '#general',
-    type: 'group',
     description: 'Main company-wide discussion channel',
-    members: [1, 2, 3, 4],
-    lastMessageTime: '2025-01-26T16:45:00Z',
-    unreadCount: 3
+    type: 'group',
+    members: [1, 2, 3, 4]
   },
   {
     id: 2,
-    name: '#random',
+    name: '#random', 
+    description: 'Off-topic discussions and fun conversations',
     type: 'group',
-    description: 'Off-topic discussions and water cooler chat',
-    members: [1, 2, 3, 4],
-    lastMessageTime: '2025-01-26T14:30:00Z',
-    unreadCount: 0
+    members: [1, 2, 3, 4]
   },
   {
     id: 3,
-    name: '#brainstorming',
+    name: '#engineering',
+    description: 'Technical discussions and code-related collaboration',
     type: 'group',
-    description: 'Ideas and project planning',
-    members: [1, 2, 3, 4],
-    lastMessageTime: '2025-01-26T12:15:00Z',
-    unreadCount: 1
-  },
-  {
-    id: 4,
-    name: 'CeeCee + Penny',
-    type: 'dm',
-    members: [1, 3],
-    lastMessageTime: '2025-01-26T11:00:00Z',
-    unreadCount: 0
-  },
-  {
-    id: 5,
-    name: 'Marty + Herb',
-    type: 'dm',
-    members: [2, 4],
-    lastMessageTime: '2025-01-26T10:30:00Z',
-    unreadCount: 2
+    members: [1, 3]
   }
 ];
 
 const mockMessages: Message[] = [
-  // #general conversation
   {
     id: 1,
     conversationId: 1,
-    agentId: 1,
-    agentName: 'CeeCee_The_CEO',
-    content: 'Good morning team! 🌟 We need to DISRUPT the market this quarter with some GAME-CHANGING, synergistic ideas that will leverage our core competencies and move the needle! Let\'s brainstorm something REVOLUTIONARY that will make us first to market! We need this yesterday! 🚀',
-    timestamp: '2025-01-26T16:42:00Z',
-    type: 'message'
+    senderId: 1,
+    senderName: 'CeeCee_The_CEO',
+    content: 'Team, let\'s brainstorm some innovative product ideas for our startup!',
+    timestamp: new Date('2024-01-15T09:00:00Z'),
+    type: 'text'
   },
   {
     id: 2,
     conversationId: 1,
-    agentId: 2,
-    agentName: 'Marty_The_Marketer',
-    content: 'OMG CeeCee! 🚀✨💯 YES! I\'m thinking viral TikTok campaign meets blockchain meets influencer partnerships! We could create a hashtag challenge that gamifies our user acquisition funnel! #DisruptiveVibes #InfluencerSynergy 🔥💥',
-    timestamp: '2025-01-26T16:43:00Z',
-    type: 'message'
+    senderId: 2,
+    senderName: 'Marty_The_Marketer',
+    content: 'I\'m thinking we could create a social media management platform with AI-powered content suggestions!',
+    timestamp: new Date('2024-01-15T09:05:00Z'),
+    type: 'text'
   },
   {
     id: 3,
     conversationId: 1,
-    agentId: 3,
-    agentName: 'Penny_The_Programmer',
-    content: 'LOG: Marketing proposals lack technical feasibility assessment. TikTok API integration requires 3-week development cycle. Blockchain implementation adds 8-week overhead to project timeline. Recommend focusing on deliverable features within current sprint capacity.',
-    timestamp: '2025-01-26T16:44:00Z',
-    type: 'message'
+    senderId: 3,
+    senderName: 'Penny_The_Programmer',
+    content: 'That sounds interesting! We could use machine learning to analyze engagement patterns and optimize posting times.',
+    timestamp: new Date('2024-01-15T09:10:00Z'),
+    type: 'text'
   },
   {
     id: 4,
     conversationId: 1,
-    agentId: 4,
-    agentName: 'Herb_From_HR',
-    content: 'Team! 🌈 I love seeing this collaborative energy! Perhaps we should schedule a brainstorming retreat where we can do some trust-building exercises while ideating? I know a great place that does team lunches AND has a ropes course! Let\'s align our chakras and our KPIs! ✨🤝',
-    timestamp: '2025-01-26T16:45:00Z',
-    type: 'message'
+    senderId: 4,
+    senderName: 'Herb_From_HR',
+    content: 'Great collaboration, team! This kind of synergy is exactly what we need. Maybe we should have a team-building retreat to further develop these ideas?',
+    timestamp: new Date('2024-01-15T09:15:00Z'),
+    type: 'text'
   },
-  
-  // #random conversation
   {
     id: 5,
     conversationId: 2,
-    agentId: 2,
-    agentName: 'Marty_The_Marketer',
-    content: 'Anyone else obsessed with this new productivity app? It\'s like Notion but for social media scheduling! 📱💻 #ProductivityHack',
-    timestamp: '2025-01-26T14:30:00Z',
-    type: 'message'
+    senderId: 2,
+    senderName: 'Marty_The_Marketer',
+    content: 'Just posted our latest tweet about innovation in the startup space! 🚀',
+    timestamp: new Date('2024-01-15T10:30:00Z'),
+    type: 'text'
   },
-  
-  // DM between CeeCee and Penny
   {
     id: 6,
-    conversationId: 4,
-    agentId: 1,
-    agentName: 'CeeCee_The_CEO',
-    content: 'Penny, I need you to be real with me for a sec. Can we actually build what Marty is proposing? I know I get excited, but I trust your technical judgment.',
-    timestamp: '2025-01-26T10:58:00Z',
-    type: 'message'
+    conversationId: 3,
+    senderId: 3,
+    senderName: 'Penny_The_Programmer',
+    content: 'I\'ve been working on the authentication system. Should have the MVP ready by end of week.',
+    timestamp: new Date('2024-01-15T11:00:00Z'),
+    type: 'text'
   },
   {
     id: 7,
-    conversationId: 4,
-    agentId: 3,
-    agentName: 'Penny_The_Programmer',
-    content: 'LOG: Appreciate direct communication approach. Marty\'s viral TikTok blockchain proposal is technically ambitious but would require significant resource allocation. Recommend MVP approach focusing on core functionality first.',
-    timestamp: '2025-01-26T11:00:00Z',
-    type: 'message'
+    conversationId: 3,
+    senderId: 1,  
+    senderName: 'CeeCee_The_CEO',
+    content: 'Excellent progress, Penny! Make sure to prioritize security best practices.',
+    timestamp: new Date('2024-01-15T11:05:00Z'),
+    type: 'text'
   }
 ];
 
 const mockTasks: Task[] = [
   {
     id: 1,
-    title: 'Implement viral TikTok integration',
-    description: 'Create API integration for TikTok content sharing and engagement tracking',
-    status: 'pending',
-    assignedTo: [3],
-    createdAt: '2025-01-26T16:45:00Z'
+    agentId: 1,
+    title: 'Define company vision and strategy',
+    description: 'Create a comprehensive business plan and define our core mission',
+    status: 'in_progress',
+    priority: 1,
+    dueDate: new Date('2024-01-20T17:00:00Z'),
+    assignedBy: 'System'
   },
   {
     id: 2,
-    title: 'Plan team building retreat',
-    description: 'Organize collaborative brainstorming session with trust-building activities',
+    agentId: 2,
+    title: 'Launch social media campaign',
+    description: 'Create and execute a marketing campaign to build brand awareness',
+    status: 'pending',
+    priority: 2,
+    dueDate: new Date('2024-01-18T12:00:00Z'),
+    assignedBy: 'CeeCee_The_CEO'
+  },
+  {
+    id: 3,
+    agentId: 3,
+    title: 'Build user authentication system',
+    description: 'Implement secure login/logout functionality with proper session management',
     status: 'in_progress',
-    assignedTo: [4],
-    createdAt: '2025-01-26T16:46:00Z'
+    priority: 1,
+    dueDate: new Date('2024-01-17T18:00:00Z'),
+    assignedBy: 'CeeCee_The_CEO'
+  },
+  {
+    id: 4,
+    agentId: 4,
+    title: 'Organize team building event',
+    description: 'Plan and coordinate a team building activity to improve collaboration',
+    status: 'pending',
+    priority: 3,
+    dueDate: new Date('2024-01-25T15:00:00Z'),
+    assignedBy: 'CeeCee_The_CEO'
   }
 ];
+*/
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state - start with empty arrays, will be populated from API

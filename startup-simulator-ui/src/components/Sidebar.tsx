@@ -1,12 +1,20 @@
 // src/components/Sidebar.tsx
-import React, { useState } from 'react';
+import React from 'react';
 import { useAppStore } from '../store';
 import ChannelList from './ChannelList';
-import AgentProfile from './AgentProfile';
+import { 
+  Crown, 
+  Megaphone, 
+  Code, 
+  Shield, 
+  Users, 
+  ChevronLeft, 
+  ChevronRight,
+  Circle
+} from 'lucide-react';
 
 const Sidebar: React.FC = () => {
   const { 
-    conversations, 
     agents, 
     sidebarCollapsed, 
     toggleSidebar,
@@ -23,10 +31,6 @@ const Sidebar: React.FC = () => {
     }
   };
 
-  const handleCloseProfile = () => {
-    setSelectedAgent(null);
-  };
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'idle':
@@ -41,6 +45,40 @@ const Sidebar: React.FC = () => {
         return 'bg-blue-500';
       default:
         return 'bg-purple-500';
+    }
+  };
+
+  const getAgentIcon = (name: string) => {
+    switch (name) {
+      case 'CeeCee_The_CEO':
+        return Crown;
+      case 'Marty_The_Marketer':
+        return Megaphone;
+      case 'Penny_The_Programmer':
+        return Code;
+      case 'Paige_The_Programmer':
+        return Shield;
+      case 'Herb_From_HR':
+        return Users;
+      default:
+        return Circle;
+    }
+  };
+
+  const getAgentColor = (name: string) => {
+    switch (name) {
+      case 'CeeCee_The_CEO':
+        return 'text-blue-400';
+      case 'Marty_The_Marketer':
+        return 'text-green-400';
+      case 'Penny_The_Programmer':
+        return 'text-red-400';
+      case 'Paige_The_Programmer':
+        return 'text-purple-400';
+      case 'Herb_From_HR':
+        return 'text-yellow-400';
+      default:
+        return 'text-gray-400';
     }
   };
 
@@ -61,10 +99,11 @@ const Sidebar: React.FC = () => {
               className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
               title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d={sidebarCollapsed ? "M13 5l7 7-7 7M5 5l7 7-7 7" : "M11 19l-7-7 7-7m8 14l-7-7 7-7"} />
-              </svg>
+              {sidebarCollapsed ? (
+                <ChevronRight className="w-5 h-5" />
+              ) : (
+                <ChevronLeft className="w-5 h-5" />
+              )}
             </button>
           </div>
         </div>
@@ -73,23 +112,77 @@ const Sidebar: React.FC = () => {
         {!sidebarCollapsed && (
           <div className="p-4 border-b border-gray-700">
             <h2 className="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wide">
-              Agents
+              Team Members
             </h2>
             <div className="space-y-2">
-              {agents.map((agent) => (
-                <button
-                  key={agent.id}
-                  onClick={() => handleAgentClick(agent.id)}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all duration-200 ${
-                    selectedAgentId === agent.id 
-                      ? 'ring-2 ring-blue-500 transform scale-110' 
-                      : 'hover:transform hover:scale-105'
-                  } ${getStatusColor(agent.status)}`}
-                  title={`${agent.name.replace(/_/g, ' ')} (${agent.role}) - ${agent.status}`}
-                >
-                  {agent.avatar}
-                </button>
-              ))}
+              {agents.map((agent) => {
+                const IconComponent = getAgentIcon(agent.name);
+                const colorClass = getAgentColor(agent.name);
+                
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => handleAgentClick(agent.id)}
+                    className={`w-full p-3 rounded-lg border transition-all duration-200 text-left ${
+                      selectedAgentId === agent.id 
+                        ? 'bg-blue-600 border-blue-500 ring-2 ring-blue-400' 
+                        : 'bg-gray-700 border-gray-600 hover:bg-gray-600 hover:border-gray-500'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center space-x-3">
+                          <div className={`p-2 rounded-full bg-gray-600 ${colorClass}`}>
+                            <IconComponent className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white truncate">
+                              {agent.name.replace(/_/g, ' ')}
+                            </p>
+                            <p className="text-xs text-gray-300 truncate">
+                              {agent.role}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${getStatusColor(agent.status)}`} />
+                        <span className="text-xs text-gray-400 capitalize">
+                          {agent.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Collapsed Agent Status Section */}
+        {sidebarCollapsed && (
+          <div className="p-2 border-b border-gray-700">
+            <div className="space-y-2">
+              {agents.map((agent) => {
+                const IconComponent = getAgentIcon(agent.name);
+                const colorClass = getAgentColor(agent.name);
+                
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => handleAgentClick(agent.id)}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 relative bg-gray-700 hover:bg-gray-600 ${
+                      selectedAgentId === agent.id 
+                        ? 'ring-2 ring-blue-500 transform scale-110' 
+                        : 'hover:transform hover:scale-105'
+                    }`}
+                    title={`${agent.name.replace(/_/g, ' ')} (${agent.role}) - ${agent.status}`}
+                  >
+                    <IconComponent className={`w-5 h-5 ${colorClass}`} />
+                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-800 ${getStatusColor(agent.status)}`} />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
