@@ -26,17 +26,24 @@ def get_helper_for_task(role: str, task_title: str) -> str:
     """Determine who can help with a specific task based on role and task type."""
     task_lower = task_title.lower()
     
-    # Technical tasks -> ask programmer
-    if any(keyword in task_lower for keyword in ["code", "technical", "architecture", "security", "implementation"]):
-        return "Penny_The_Programmer" if role != "Programmer" else "CeeCee_The_CEO"
+    # Technical tasks -> ask programmer (prefer Penny for rapid development, Paige for security/testing)
+    if any(keyword in task_lower for keyword in ["code", "technical", "architecture", "security", "implementation", "create", "build", "develop", "system", "authentication", "database", "api", "frontend", "backend"]):
+        if role != "Programmer":
+            # Non-programmers can ask either programmer - prefer Penny for general dev, Paige for security
+            if any(keyword in task_lower for keyword in ["security", "test", "review", "quality"]):
+                return "Paige_The_Programmer"
+            else:
+                return "Penny_The_Programmer"
+        else:
+            return "CeeCee_The_CEO"  # Programmers escalate to CEO
     
     # Marketing tasks -> ask marketer  
     elif any(keyword in task_lower for keyword in ["marketing", "social", "campaign", "brand", "content"]):
-        return "Mark_The_Marketer" if role != "Marketer" else "CeeCee_The_CEO"
+        return "Marty_The_Marketer" if role != "Marketer" else "CeeCee_The_CEO"
     
     # HR/team tasks -> ask HR
     elif any(keyword in task_lower for keyword in ["team", "hr", "employee", "satisfaction", "hiring"]):
-        return "Hannah_The_HR" if role != "HR" else "CeeCee_The_CEO"
+        return "Herb_From_HR" if role != "HR" else "CeeCee_The_CEO"
     
     # Business/strategy tasks -> ask CEO
     elif any(keyword in task_lower for keyword in ["strategy", "business", "market", "budget", "financial"]):
@@ -45,6 +52,28 @@ def get_helper_for_task(role: str, task_title: str) -> str:
     # Default: ask in general channel
     else:
         return "general"
+
+
+def should_report_task_completion(task: AgentTask, agent_role: str) -> bool:
+    """Determine if a completed task should be reported to the agent's superior."""
+    # Always report completion of high-priority tasks (priority <= 3)
+    if task.priority <= 3:
+        return True
+    
+    # Report completion of parent tasks (tasks with children)
+    if task.parent_id is None:  # Root tasks are typically important
+        return True
+    
+    # Report completion of tasks that create deliverables
+    deliverable_keywords = [
+        "create", "build", "implement", "develop", "design", "complete",
+        "finish", "deploy", "launch", "release"
+    ]
+    if any(keyword in task.title.lower() for keyword in deliverable_keywords):
+        return True
+    
+    # Don't report minor sub-tasks or routine work
+    return False
 
 
 class AgentManager:
@@ -311,16 +340,159 @@ async def check_for_messages(agent_model: Agent, message_queue: asyncio.Queue) -
 
 
 async def get_agent_todo_list(agent_model: Agent) -> List[AgentTask]:
-    """Get the agent's current to-do list."""
+    """Get the agent's current to-do list, prioritizing leaf tasks (no pending children)."""
     with Session(engine) as session:
-        tasks = session.exec(
+        # Get all pending and in-progress tasks
+        all_tasks = session.exec(
             select(AgentTask)
             .where(AgentTask.agent_id == agent_model.id)
             .where(AgentTask.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
             .order_by(AgentTask.priority)
         ).all()
         
-        return list(tasks)
+        if not all_tasks:
+            return []
+        
+        # Separate leaf tasks (no pending children) from parent tasks
+        leaf_tasks = []
+        parent_tasks = []
+        
+        for task in all_tasks:
+            # Check if this task has any pending/in-progress children
+            has_pending_children = any(
+                child for child in all_tasks 
+                if child.parent_id == task.id and child.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]
+            )
+            
+            if has_pending_children:
+                parent_tasks.append(task)
+            else:
+                leaf_tasks.append(task)
+        
+        # Return leaf tasks first (these can be worked on), then parent tasks
+        return leaf_tasks + parent_tasks
+
+
+def should_create_subtasks(task: AgentTask, agent_role: str) -> bool:
+    """Determine if a task should be broken down into sub-tasks based on its complexity."""
+    task_title = task.title.lower()
+    task_description = task.description.lower()
+    
+    # Keywords that indicate a task might need breaking down
+    complex_keywords = [
+        "build", "create", "implement", "develop", "design", "system", 
+        "feature", "application", "platform", "website", "dashboard",
+        "authentication", "database", "api", "integration", "architecture"
+    ]
+    
+    # If the task contains complex keywords and is more than just a simple action
+    has_complex_keywords = any(keyword in task_title or keyword in task_description for keyword in complex_keywords)
+    
+    # Don't break down tasks that are already specific
+    specific_keywords = [
+        "write code", "fix bug", "test", "review", "document", "research",
+        "meeting", "call", "email", "message", "tweet", "post"
+    ]
+    is_specific = any(keyword in task_title or keyword in task_description for keyword in specific_keywords)
+    
+    return has_complex_keywords and not is_specific
+
+
+def generate_subtasks_for_task(task: AgentTask, agent_role: str) -> List[Dict[str, Any]]:
+    """Generate appropriate sub-tasks based on the parent task and agent role."""
+    task_title = task.title.lower()
+    task_description = task.description.lower()
+    
+    # Role-specific sub-task generation
+    if agent_role == "Programmer":
+        if "authentication" in task_title or "auth" in task_title:
+            return [
+                {"title": "Design authentication database schema", "description": "Create user table and authentication-related database structure"},
+                {"title": "Implement user registration API", "description": "Create endpoint for new user signup with validation"},
+                {"title": "Implement user login API", "description": "Create endpoint for user authentication and token generation"},
+                {"title": "Create authentication middleware", "description": "Build middleware to protect routes and validate tokens"},
+                {"title": "Write authentication tests", "description": "Create unit and integration tests for auth system"}
+            ]
+        elif "dashboard" in task_title or "interface" in task_title:
+            return [
+                {"title": "Design dashboard layout", "description": "Create wireframe and component structure for dashboard"},
+                {"title": "Implement navigation components", "description": "Build sidebar, header, and navigation elements"},
+                {"title": "Create data visualization components", "description": "Build charts, graphs, and data display components"},
+                {"title": "Implement responsive design", "description": "Ensure dashboard works on different screen sizes"},
+                {"title": "Add interactivity and state management", "description": "Implement user interactions and data flow"}
+            ]
+        elif any(keyword in task_title for keyword in ["build", "create", "implement"]) and any(keyword in task_title for keyword in ["system", "feature", "application"]):
+            return [
+                {"title": "Plan technical architecture", "description": "Design system components and their interactions"},
+                {"title": "Set up development environment", "description": "Configure tools, dependencies, and project structure"},
+                {"title": "Implement core functionality", "description": "Build the main features and business logic"},
+                {"title": "Create user interface", "description": "Build frontend components and user interactions"},
+                {"title": "Test and debug", "description": "Write tests and fix any issues found"}
+            ]
+    
+    elif agent_role == "Marketer":
+        if "campaign" in task_title or "marketing" in task_title:
+            return [
+                {"title": "Research target audience", "description": "Identify and analyze potential customers and market segments"},
+                {"title": "Develop messaging strategy", "description": "Create compelling value propositions and key messages"},
+                {"title": "Choose marketing channels", "description": "Select optimal platforms and channels for reaching audience"},
+                {"title": "Create marketing content", "description": "Develop ads, posts, emails, and other marketing materials"},
+                {"title": "Launch and monitor campaign", "description": "Execute campaign and track performance metrics"}
+            ]
+        elif "landing page" in task_title or "website" in task_title:
+            return [
+                {"title": "Define page objectives", "description": "Clarify goals, target audience, and desired actions"},
+                {"title": "Create compelling copy", "description": "Write headlines, descriptions, and call-to-action text"},
+                {"title": "Design page layout", "description": "Create wireframe and visual design for the page"},
+                {"title": "Optimize for conversions", "description": "Add forms, buttons, and conversion-focused elements"},
+                {"title": "Test and iterate", "description": "A/B test different versions and optimize performance"}
+            ]
+    
+    elif agent_role == "HR":
+        if "team" in task_title or "hiring" in task_title:
+            return [
+                {"title": "Define role requirements", "description": "Create job descriptions and required qualifications"},
+                {"title": "Source candidates", "description": "Use various channels to find potential team members"},
+                {"title": "Screen and interview", "description": "Conduct initial screening and interview processes"},
+                {"title": "Check references", "description": "Verify candidate backgrounds and previous experience"},
+                {"title": "Make hiring decisions", "description": "Evaluate candidates and extend offers to best fits"}
+            ]
+    
+    # Default generic breakdown for any complex task
+    return [
+        {"title": f"Research and plan: {task.title}", "description": "Gather requirements and create detailed plan"},
+        {"title": f"Begin implementation: {task.title}", "description": "Start working on the main deliverables"},
+        {"title": f"Review and refine: {task.title}", "description": "Test, review, and improve the work"},
+        {"title": f"Finalize: {task.title}", "description": "Complete final touches and mark as done"}
+    ]
+
+
+def should_complete_task(task: AgentTask, agent_role: str) -> bool:
+    """Determine if a leaf task should be marked as complete based on heuristics."""
+    task_title = task.title.lower()
+    task_description = task.description.lower()
+    
+    # Simple heuristics for task completion - in a real system, this could be more sophisticated
+    # For now, we'll use a simple approach: if the task has been in progress and involves
+    # creating something specific, we'll assume it's complete after some work has been done
+    
+    # Tasks that are typically one-shot activities
+    one_shot_keywords = [
+        "design", "create", "write", "implement", "build", "set up", "configure",
+        "research", "plan", "define", "document", "test"
+    ]
+    
+    # If this is a one-shot task and it's been worked on, it's likely complete
+    if any(keyword in task_title for keyword in one_shot_keywords):
+        return True
+    
+    # For communication or ongoing tasks, they're complete after one interaction
+    communication_keywords = ["message", "email", "call", "meeting", "discuss", "brainstorm"]
+    if any(keyword in task_title for keyword in communication_keywords):
+        return True
+    
+    # Default: assume task needs more work
+    return False
 
 
 async def decide_next_action(agent_model: Agent, agent_instance, messages: List[Dict], todo_list: List[AgentTask], responded_messages: set) -> Dict[str, Any]:
@@ -381,40 +553,82 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                             }
                         }
     
-    # 1. Report completed high-priority tasks to superior
-    if todo_list:
-        completed_tasks = [t for t in todo_list if t.status == TaskStatus.COMPLETED and t.priority <= 2]
-        print(f"🎯 {agent_model.name} has {len(completed_tasks)} completed high-priority tasks")
-        if completed_tasks:
-            completed_task = completed_tasks[0]
+    # 1. Report completed tasks to superior (enhanced proactive reporting)
+    # Check for recently completed tasks (separate from todo_list which only has active tasks)
+    with Session(engine) as session:
+        # Get recently completed tasks (within last 5 minutes) that haven't been reported yet
+        import datetime
+        cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
+        
+        # For now, we'll check all completed tasks and rely on agent memory to avoid duplicate reports
+        # In a full implementation, we'd track which tasks have been reported
+        recently_completed = session.exec(
+            select(AgentTask)
+            .where(AgentTask.agent_id == agent_model.id)
+            .where(AgentTask.status == TaskStatus.COMPLETED)
+            .order_by(AgentTask.priority)
+        ).all()
+        
+        # Filter to tasks that should be reported
+        completed_tasks_to_report = [t for t in recently_completed if should_report_task_completion(t, agent_model.role)]
+        print(f"🎯 {agent_model.name} has {len(completed_tasks_to_report)} completed tasks that could be reported")
+        
+        if completed_tasks_to_report:
+            # Report the highest priority completed task first
+            completed_task = completed_tasks_to_report[0]
             superior = get_superior_for_agent(agent_model.role)
             print(f"🎯 {agent_model.name} should report to superior: {superior}")
+            
             if superior:
                 print(f"📤 {agent_model.name} sending DM to {superior} about completed task")
+                # Create a more detailed report message
+                report_message = f"✅ Task Complete: '{completed_task.title}'\n"
+                report_message += f"📋 Description: {completed_task.description}\n"
+                report_message += f"⚡ Priority: {completed_task.priority}\n"
+                
+                # Add context about children if it's a parent task
+                children = session.exec(
+                    select(AgentTask).where(AgentTask.parent_id == completed_task.id)
+                ).all()
+                if children:
+                    completed_children = [c for c in children if c.status == TaskStatus.COMPLETED]
+                    report_message += f"📊 Sub-tasks: {len(completed_children)}/{len(children)} completed\n"
+                
+                report_message += f"🚀 Ready for next assignment or follow-up tasks."
+                
                 return {
                     "type": "use_tool",
                     "tool": "send_direct_message",
                     "args": {
                         "agent_name": agent_model.name, 
                         "recipient_agent": superior, 
-                        "message": f"Update: Completed '{completed_task.title}'. {completed_task.description}. Ready for next assignment."
+                        "message": report_message
                     }
                 }
     
-    # 2. Ask for help when blocked (immediately, not randomly)
+    # 2. Ask for help when blocked (enhanced proactive help-seeking)
     if todo_list:
         blocked_tasks = [t for t in todo_list if t.status == TaskStatus.BLOCKED]
         if blocked_tasks:
-            blocked_task = blocked_tasks[0]
+            # Prioritize help requests for higher priority blocked tasks
+            blocked_task = sorted(blocked_tasks, key=lambda x: x.priority)[0]
             helper = get_helper_for_task(agent_model.role, blocked_task.title)
+            
+            # Create a detailed help request message
+            help_message = f"🚫 BLOCKED: Need assistance with '{blocked_task.title}'\n"
+            help_message += f"📋 Task: {blocked_task.description}\n"
+            help_message += f"⚡ Priority: {blocked_task.priority}\n"
+            help_message += f"🤔 Issue: I'm unable to proceed and need guidance on requirements, dependencies, or approach.\n"
+            help_message += f"⏰ This is blocking my progress - please advise when you have a moment."
+            
             if helper == "general":
                 return {
                     "type": "use_tool",
                     "tool": "ask_for_help",
                     "args": {
                         "agent_name": agent_model.name,
-                        "topic": blocked_task.title,
-                        "details": f"Blocked on '{blocked_task.title}': {blocked_task.description}. Need guidance to proceed."
+                        "topic": f"BLOCKED: {blocked_task.title}",
+                        "details": help_message
                     }
                 }
             else:
@@ -424,7 +638,7 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     "args": {
                         "agent_name": agent_model.name,
                         "recipient_agent": helper,
-                        "message": f"Need help with '{blocked_task.title}': {blocked_task.description}. Could you clarify requirements or dependencies?"
+                        "message": help_message
                     }
                 }
     
@@ -459,8 +673,62 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                     session.add(task)
                     session.commit()
             
+            # PLANNING STEP: Check if this is a high-level task that needs breaking down
+            # If it's a complex task with no children, create sub-tasks first
+            with Session(engine) as session:
+                existing_children = session.exec(
+                    select(AgentTask).where(AgentTask.parent_id == current_task.id)
+                ).all()
+                
+                # If no children exist and this looks like a complex task, plan it out
+                if not existing_children and should_create_subtasks(current_task, agent_model.role):
+                    sub_tasks = generate_subtasks_for_task(current_task, agent_model.role)
+                    if sub_tasks:
+                        return {
+                            "type": "use_tool",
+                            "tool": "create_sub_tasks",
+                            "args": {
+                                "agent_name": agent_model.name,
+                                "parent_task_id": current_task.id,
+                                "sub_tasks": sub_tasks
+                            }
+                        }
+            
             # Now determine what action to take based on the task and agent role
         elif current_task.status == TaskStatus.IN_PROGRESS:
+            # COMPLETION CHECK: First, evaluate if this task is actually complete
+            # Check if all children are complete (for parent tasks) or if work is done (for leaf tasks)
+            with Session(engine) as session:
+                children = session.exec(
+                    select(AgentTask).where(AgentTask.parent_id == current_task.id)
+                ).all()
+                
+                # For parent tasks: complete when all children are complete
+                if children:
+                    incomplete_children = [c for c in children if c.status != TaskStatus.COMPLETED]
+                    if not incomplete_children:
+                        # All children complete - mark parent as complete
+                        return {
+                            "type": "use_tool",
+                            "tool": "complete_task",
+                            "args": {
+                                "agent_name": agent_model.name,
+                                "task_id": current_task.id
+                            }
+                        }
+                # For leaf tasks: agent decides based on the work done
+                else:
+                    # Check if the agent has done enough work on this task to consider it complete
+                    if should_complete_task(current_task, agent_model.role):
+                        return {
+                            "type": "use_tool",
+                            "tool": "complete_task",
+                            "args": {
+                                "agent_name": agent_model.name,
+                                "task_id": current_task.id
+                            }
+                        }
+            
             # For tasks already in progress, agents can choose to:
             # 1. Continue working on them with tools
             # 2. Complete them if they feel the work is done
@@ -780,7 +1048,7 @@ async def execute_action(agent_model: Agent, agent_instance, action: Dict[str, A
 
 
 async def update_task_progress(task_id: int, tool_name: str):
-    """Update a task's progress and potentially complete it."""
+    """Update a task's progress. Agents decide when tasks are complete."""
     with Session(engine) as session:
         task = session.exec(select(AgentTask).where(AgentTask.id == task_id)).first()
         if not task:
@@ -793,39 +1061,16 @@ async def update_task_progress(task_id: int, tool_name: str):
             session.commit()
             print(f"📋 Task {task_id} marked as IN_PROGRESS")
             
-        # For tasks already in progress, only complete if it's a truly deterministic action
+        # For tasks already in progress, just log the progress
         elif task.status == TaskStatus.IN_PROGRESS:
-            # Tools that create genuine deliverables and should auto-complete a task.
-            # Removed pure-communication tools so brainstorming/review tasks stay open.
-            deliverable_creation_tools = [
-                "create_code_file", "create_feature_spec", "build_database_schema", 
-                "create_api_endpoint", "deploy_mvp_feature", "write_to_file",
-                "write_tweet"
-            ]
+            print(f"🔄 Task {task_id} progress: used {tool_name} for '{task.title}'")
             
-            # Auto-complete tasks when agents create actual deliverables
-            if tool_name in deliverable_creation_tools:
-                task.status = TaskStatus.COMPLETED
-                session.add(task)
-                session.commit()
-                print(f"✅ Task {task_id} auto-completed after creating deliverable with {tool_name}: {task.title}")
-                
-                # Broadcast task completion
-                try:
-                    from api.main import broadcast_task_list_update
-                    await broadcast_task_list_update(task.agent_id)
-                except ImportError:
-                    pass
-            else:
-                # For other tools, just update the task list without auto-completing
-                print(f"🔄 Task {task_id} progress updated (agent will decide when complete): {task.title}")
-            
-            # Always broadcast task list update
-            try:
-                from api.main import broadcast_task_list_update
-                await broadcast_task_list_update(task.agent_id)
-            except ImportError:
-                pass  # Avoid circular import issues
+        # Always broadcast task list update
+        try:
+            from api.main import broadcast_task_list_update
+            await broadcast_task_list_update(task.agent_id)
+        except ImportError:
+            pass  # Avoid circular import issues
 
 
 async def broadcast_agent_action(agent_model: Agent, tool_name: str, result: str, message_queue: asyncio.Queue):

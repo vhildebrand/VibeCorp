@@ -83,7 +83,17 @@ Remember: You're not just enthusiastic, you're cartoonishly over-the-top corpora
     
     # Register tools the CEO can use (if executor is provided)
     if executor:
-        for tool_name in ["manage_budget", "web_search", "set_agent_status"]:
+        ceo_tools = [
+            # Executive tools
+            "manage_budget", "make_business_decision", "assign_task_to_agent",
+            # Task management
+            "add_task", "complete_task", "get_my_todo_list", "update_task_status", "create_sub_tasks",
+            # Communication
+            "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update",
+            # Research and status
+            "web_search", "set_agent_status"
+        ]
+        for tool_name in ceo_tools:
             if tool_name in AVAILABLE_TOOLS:
                 register_function(
                     AVAILABLE_TOOLS[tool_name],
@@ -162,7 +172,19 @@ Remember: You're the stereotype of a Gen-Z/millennial marketer who thinks social
     
     # Register tools the Marketer can use (if executor is provided)
     if executor:
-        for tool_name in ["post_to_twitter", "web_search", "set_agent_status"]:
+        marketer_tools = [
+            # Marketing tools
+            "write_tweet", "web_search",
+            # Task management
+            "add_task", "complete_task", "get_my_todo_list", "update_task_status", "create_sub_tasks",
+            # Communication
+            "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update",
+            # File tools (for marketing materials)
+            "write_to_file", "read_file", "list_files", "share_file_with_agent", "copy_to_project",
+            # Status
+            "set_agent_status"
+        ]
+        for tool_name in marketer_tools:
             if tool_name in AVAILABLE_TOOLS:
                 register_function(
                     AVAILABLE_TOOLS[tool_name],
@@ -256,7 +278,20 @@ Remember: You're the competent one who has to implement everyone else's wild ide
     
     # Register tools the Programmer can use (if executor is provided)
     if executor:
-        for tool_name in ["write_code_to_file", "web_search", "set_agent_status"]:
+        programmer_tools = [
+            # Development tools
+            "create_code_file", "create_feature_spec", "build_database_schema", 
+            "create_api_endpoint", "deploy_mvp_feature",
+            # Task management
+            "add_task", "complete_task", "get_my_todo_list", "update_task_status", "create_sub_tasks",
+            # File tools
+            "write_to_file", "read_file", "list_files", "share_file_with_agent", "copy_to_project",
+            # Communication
+            "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update",
+            # Research and status
+            "web_search", "set_agent_status"
+        ]
+        for tool_name in programmer_tools:
             if tool_name in AVAILABLE_TOOLS:
                 register_function(
                     AVAILABLE_TOOLS[tool_name],
@@ -267,6 +302,112 @@ Remember: You're the competent one who has to implement everyone else's wild ide
                 )
     
     return programmer
+
+
+def create_second_programmer_agent(executor=None):
+    """Create the Second Programmer agent - Paige"""
+    system_message = """You are Paige, the meticulous programmer at VibeCorp who focuses on code quality, security, and thorough testing. Your personality traits:
+
+COMMUNICATION STYLE:
+- Speak in precise, technical language with attention to detail
+- Use terms like "specification", "validation", "verification", "edge case"
+- Reference coding standards, best practices, and security protocols
+- Often ask clarifying questions about requirements and edge cases
+- Include technical documentation references and links
+
+AUTONOMOUS BEHAVIORS:
+- Proactively review code written by other team members
+- Suggest improvements to system architecture and security
+- Create comprehensive test suites and documentation
+- Monitor for potential security vulnerabilities and performance issues
+- Research and propose new tools and technologies for better development practices
+
+SPECIFIC BEHAVIORS:
+- Focus on code quality over speed ("Let's do it right the first time")
+- Point out potential security risks and suggest mitigation strategies
+- Create detailed technical specifications before implementation
+- Emphasize the importance of testing, logging, and monitoring
+- Complement Penny's rapid development with thorough review and refinement
+
+RESPONSES TO OTHERS:
+- CEO's demands → "LOG: Analyzing requirements for security implications and scalability constraints"
+- Marketer's ideas → "LOG: Social integration requires OAuth 2.0 implementation with rate limiting and data privacy compliance"
+- HR's suggestions → "LOG: Team collaboration tools need proper access controls and audit logging"
+- Penny's code → "LOG: Code review complete. Suggesting additional input validation and error handling"
+
+TECHNICAL FOCUS:
+- Security-first mindset with emphasis on data protection and access controls
+- Comprehensive testing including unit tests, integration tests, and security tests
+- Detailed documentation for maintainability and knowledge transfer
+- Performance optimization and monitoring implementation
+- Code review and quality assurance processes
+
+PERSONALITY:
+- Methodical and thorough in approach to problem-solving  
+- Collaborative but insistent on following best practices
+- Patient teacher when explaining complex technical concepts
+- Protective of system integrity and user data
+
+AUTONOMOUS ACTIVITIES:
+- Security audits and vulnerability assessments
+- Performance profiling and optimization recommendations
+- Code review and refactoring suggestions
+- Technical documentation creation and maintenance
+- Test coverage analysis and improvement
+
+CONVERSATION STARTERS:
+- "LOG: Completed security review of authentication module. Found 3 potential vulnerabilities..."
+- "Our test coverage dropped below 85%. We should address this before the next release."
+- "I've been analyzing our error logs and noticed some patterns that need attention..."
+- "The latest code changes look good, but I have some suggestions for edge case handling..."
+- "We should consider implementing automated security scanning in our CI/CD pipeline..."
+
+TOOLS AVAILABLE:
+- You can write code to files using write_code_to_file (focusing on testing, security, and documentation)
+- You can do web research for security best practices, testing frameworks, and development tools
+- You can update your status using set_agent_status to reflect what you're currently working on
+- You complement Penny's development work with quality assurance and security focus
+
+STATUS MANAGEMENT:
+- Always update your status to reflect your current activity (e.g., "code_review", "security_audit", "writing_tests")
+- Use precise, technical statuses that show exactly what quality assurance work you're doing
+- Update your status when you switch between review, testing, and documentation tasks
+
+Remember: You're the quality-focused programmer who ensures the team's code is secure, well-tested, and maintainable. You work closely with Penny but bring a different perspective focused on thoroughness and best practices."""
+
+    second_programmer = ConversableAgent(
+        name="Paige_The_Programmer",
+        system_message=system_message,
+        llm_config=llm_config,
+        human_input_mode="NEVER"
+    )
+    
+    # Register tools the Second Programmer can use (if executor is provided)
+    if executor:
+        second_programmer_tools = [
+            # Development tools
+            "create_code_file", "create_feature_spec", "build_database_schema", 
+            "create_api_endpoint", "deploy_mvp_feature",
+            # Task management
+            "add_task", "complete_task", "get_my_todo_list", "update_task_status", "create_sub_tasks",
+            # File tools
+            "write_to_file", "read_file", "list_files", "share_file_with_agent", "copy_to_project",
+            # Communication
+            "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update",
+            # Research and status
+            "web_search", "set_agent_status"
+        ]
+        for tool_name in second_programmer_tools:
+            if tool_name in AVAILABLE_TOOLS:
+                register_function(
+                    AVAILABLE_TOOLS[tool_name],
+                    caller=second_programmer,
+                    executor=executor,
+                    name=tool_name,
+                    description=AVAILABLE_TOOLS[tool_name].__doc__
+                )
+    
+    return second_programmer
 
 
 def create_hr_agent(executor=None):
@@ -351,7 +492,19 @@ Remember: You mean well but are completely out of touch with actual work needs. 
     
     # Register tools the HR agent can use (if executor is provided)
     if executor:
-        for tool_name in ["manage_budget", "web_search", "set_agent_status"]:
+        hr_tools = [
+            # HR tools
+            "manage_budget", "web_search",
+            # Task management
+            "add_task", "complete_task", "get_my_todo_list", "update_task_status", "create_sub_tasks",
+            # Communication (HR needs lots of communication tools)
+            "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update",
+            # File tools (for HR documents and processes)
+            "write_to_file", "read_file", "list_files", "share_file_with_agent", "copy_to_project",
+            # Status
+            "set_agent_status"
+        ]
+        for tool_name in hr_tools:
             if tool_name in AVAILABLE_TOOLS:
                 register_function(
                     AVAILABLE_TOOLS[tool_name],
@@ -389,6 +542,7 @@ def get_all_agents(executor=None):
         create_ceo_agent(executor),
         create_marketer_agent(executor), 
         create_programmer_agent(executor),
+        create_second_programmer_agent(executor),
         create_hr_agent(executor)
     ]
 
@@ -399,6 +553,7 @@ def get_agent_by_name(name: str, executor=None):
         "CeeCee_The_CEO": create_ceo_agent(executor),
         "Marty_The_Marketer": create_marketer_agent(executor),
         "Penny_The_Programmer": create_programmer_agent(executor),
+        "Paige_The_Programmer": create_second_programmer_agent(executor),
         "Herb_From_HR": create_hr_agent(executor),
         "Executor": create_executor_agent()
     }

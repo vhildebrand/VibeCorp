@@ -76,7 +76,20 @@ class AgentTask(SQLModel, table=True):
     priority: int = Field(default=10)
     dependencies: Optional[str] = Field(default=None)  # Storing dependencies as a comma-separated string of task IDs
     
+    # Hierarchical task structure - parent-child relationships
+    parent_id: Optional[int] = Field(default=None, foreign_key="agent_tasks.id")
+    
     agent: Agent = Relationship(back_populates="tasks")
+    
+    # Self-referencing relationships for task hierarchy
+    parent: Optional["AgentTask"] = Relationship(
+        back_populates="children",
+        sa_relationship_kwargs={"remote_side": "AgentTask.id"}
+    )
+    children: List["AgentTask"] = Relationship(
+        back_populates="parent",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 # Agent Memory System - New models for contextual awareness

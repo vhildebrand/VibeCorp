@@ -36,7 +36,7 @@ def seed_initial_data():
             print("ℹ️  Initial data already exists, skipping seed.")
             return
 
-        # Create the four main agents
+        # Create the five main agents (including two programmers)
         agents = [
             Agent(
                 name="CeeCee_The_CEO",
@@ -57,6 +57,13 @@ def seed_initial_data():
                 role="Programmer", 
                 persona="A pragmatic, slightly sarcastic programmer who speaks in technical terms and LOG statements. Gets frustrated with unrealistic requests and prefers to focus on actual implementation over buzzwords. Often the voice of reason but can be blunt about technical limitations.",
                 system_prompt="You are Penny, the pragmatic programmer at VibeCorp who has to deal with everyone else's unrealistic demands.",
+                status="idle"
+            ),
+            Agent(
+                name="Paige_The_Programmer",
+                role="Programmer",
+                persona="A detail-oriented, security-focused programmer who complements Penny's work. More methodical and thorough in approach, with expertise in testing, documentation, and code review. Speaks in precise technical language and is passionate about clean code and best practices.",
+                system_prompt="You are Paige, the meticulous programmer at VibeCorp who focuses on code quality, security, and thorough testing. You complement Penny's rapid development with careful review and robust architecture.",
                 status="idle"
             ),
             Agent(
@@ -81,25 +88,25 @@ def seed_initial_data():
                 name="#general",
                 description="Main company-wide discussion channel",
                 type="group",
-                members=[1, 2, 3, 4]  # All agents
+                members=[1, 2, 3, 4, 5]  # All agents
             ),
             Conversation(
                 name="#random", 
                 description="Off-topic discussions and water cooler chat",
                 type="group",
-                members=[1, 2, 3, 4]  # All agents
+                members=[1, 2, 3, 4, 5]  # All agents
             ),
             Conversation(
                 name="#engineering",
                 description="Technical discussions and code-related collaboration",
                 type="group", 
-                members=[1, 3]  # CEO and Programmer
+                members=[1, 3, 4]  # CEO and both Programmers
             ),
             Conversation(
                 name="#programming",
                 description="Dedicated coding workspace with syntax highlighting and dev tools",
                 type="group",
-                members=[3]  # Just Programmer initially, others can be added
+                members=[3, 4]  # Both Programmers
             ),
             Conversation(
                 name="#marketing",

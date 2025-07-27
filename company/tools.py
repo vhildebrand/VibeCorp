@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from sqlmodel import Session, select
 from agents.status_tool import set_agent_status
 from agents.communication_tools import send_message_to_channel, send_direct_message, ask_for_help, share_update
@@ -93,13 +93,13 @@ def complete_task(agent_name: str, task_id: int) -> str:
 
 def get_my_todo_list(agent_name: str) -> str:
     """
-    Get the current to-do list for an agent.
+    Get the current to-do list for an agent, displaying hierarchical task structure.
     
     Args:
         agent_name (str): The name of the agent
         
     Returns:
-        str: Formatted to-do list
+        str: Formatted hierarchical to-do list
     """
     try:
         with Session(engine) as session:
@@ -108,22 +108,46 @@ def get_my_todo_list(agent_name: str) -> str:
             if not agent:
                 return f"❌ Agent '{agent_name}' not found"
             
-            # Get all pending and in-progress tasks, ordered by priority
-            tasks = session.exec(
+            # Get all pending and in-progress tasks
+            all_tasks = session.exec(
                 select(AgentTask)
                 .where(AgentTask.agent_id == agent.id)
                 .where(AgentTask.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
                 .order_by(AgentTask.priority)
             ).all()
             
-            if not tasks:
+            if not all_tasks:
                 return f"📋 {agent_name}'s to-do list is empty! 🎉"
             
-            todo_list = f"📋 {agent_name}'s To-Do List ({len(tasks)} tasks):\n\n"
-            for i, task in enumerate(tasks, 1):
+            # Separate root tasks (no parent) from sub-tasks
+            root_tasks = [task for task in all_tasks if task.parent_id is None]
+            task_dict = {task.id: task for task in all_tasks}
+            
+            def format_task_tree(task, indent_level=0):
+                """Recursively format a task and its children"""
+                indent = "  " * indent_level
                 status_emoji = "⏳" if task.status == TaskStatus.IN_PROGRESS else "📌"
-                todo_list += f"{i}. {status_emoji} [{task.priority}] {task.title} (ID: {task.id})\n"
-                todo_list += f"   📝 {task.description}\n\n"
+                
+                # Count pending children
+                children = [t for t in all_tasks if t.parent_id == task.id]
+                pending_children = len([c for c in children if c.status == TaskStatus.PENDING])
+                child_info = f" ({pending_children} sub-tasks)" if children else ""
+                
+                result = f"{indent}{status_emoji} [{task.priority}] {task.title}{child_info} (ID: {task.id})\n"
+                result += f"{indent}   📝 {task.description}\n"
+                
+                # Add children recursively
+                for child in sorted(children, key=lambda x: x.priority):
+                    result += format_task_tree(child, indent_level + 1)
+                
+                return result
+            
+            todo_list = f"📋 {agent_name}'s Task Graph ({len(all_tasks)} total tasks):\n\n"
+            
+            # Display root tasks and their hierarchies
+            for task in sorted(root_tasks, key=lambda x: x.priority):
+                todo_list += format_task_tree(task)
+                todo_list += "\n"
             
             return todo_list
             
@@ -243,6 +267,61 @@ def assign_task_to_agent(assigner_name: str, assignee_name: str, title: str, des
             
     except Exception as e:
         return f"❌ Error assigning task: {str(e)}"
+
+
+def create_sub_tasks(agent_name: str, parent_task_id: int, sub_tasks: List[Dict[str, Any]]) -> str:
+    """
+    Create multiple sub-tasks under a parent task, enabling hierarchical planning.
+    
+    Args:
+        agent_name (str): The agent creating the sub-tasks
+        parent_task_id (int): ID of the parent task
+        sub_tasks (List[Dict]): List of sub-task dictionaries with 'title', 'description', and optional 'priority'
+        
+    Returns:
+        str: Confirmation message
+    """
+    try:
+        with Session(engine) as session:
+            # Find the agent
+            agent = session.exec(select(Agent).where(Agent.name == agent_name)).first()
+            if not agent:
+                return f"❌ Agent '{agent_name}' not found"
+            
+            # Find the parent task
+            parent_task = session.exec(
+                select(AgentTask)
+                .where(AgentTask.id == parent_task_id)
+                .where(AgentTask.agent_id == agent.id)
+            ).first()
+            
+            if not parent_task:
+                return f"❌ Parent task {parent_task_id} not found for {agent_name}"
+            
+            # Create the sub-tasks
+            created_tasks = []
+            for i, sub_task_data in enumerate(sub_tasks):
+                if not isinstance(sub_task_data, dict) or 'title' not in sub_task_data:
+                    continue
+                    
+                sub_task = AgentTask(
+                    agent_id=agent.id,
+                    parent_id=parent_task_id,
+                    title=sub_task_data['title'],
+                    description=sub_task_data.get('description', ''),
+                    priority=sub_task_data.get('priority', parent_task.priority + i + 1),  # Slightly lower priority than parent
+                    status=TaskStatus.PENDING
+                )
+                
+                session.add(sub_task)
+                created_tasks.append(sub_task.title)
+            
+            session.commit()
+            
+            return f"✅ Created {len(created_tasks)} sub-tasks under '{parent_task.title}': {', '.join(created_tasks)}"
+            
+    except Exception as e:
+        return f"❌ Error creating sub-tasks: {str(e)}"
 
 
 # ==============================================================================
@@ -1200,6 +1279,7 @@ AVAILABLE_TOOLS = {
     "get_my_todo_list": get_my_todo_list,
     "update_task_status": update_task_status,
     "assign_task_to_agent": assign_task_to_agent,
+    "create_sub_tasks": create_sub_tasks,
     
     # Development & Building Tools
     "create_code_file": create_code_file,
