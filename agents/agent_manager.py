@@ -212,7 +212,8 @@ async def check_brainstorming_progress(agent_model: Agent) -> List[Dict[str, str
             
             # Get messages from last 15 minutes from other agents (extended window)
             import datetime
-            cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=15)
+            # Shorten brainstorming window from 15 → 3 minutes for faster cycles
+            cutoff_time = datetime.datetime.now() - datetime.timedelta(minutes=3)
             
             recent_messages = session.exec(
                 select(Message, Agent)
@@ -486,45 +487,15 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                                 "task_id": current_task.id
                             }
                         }
-                    elif len(brainstorm_messages) >= 1:
-                        # Check if we've been waiting long enough (2+ minutes) to make decision with fewer inputs
-                        if brainstorm_messages:
-                            import datetime
-                            oldest_message_time = datetime.datetime.fromisoformat(brainstorm_messages[-1]["timestamp"])
-                            time_elapsed = datetime.datetime.now() - oldest_message_time
-                            
-                            if time_elapsed.total_seconds() > 120:  # 2 minutes (even faster)
-                                print(f"⏰ CEO {agent_model.name} making decision with {len(brainstorm_messages)} messages after 2+ minutes")
-                                return {
-                                    "type": "use_tool",
-                                    "tool": "make_business_decision",
-                                    "args": {
-                                        "agent_name": agent_model.name,
-                                        "brainstorm_messages": brainstorm_messages,
-                                        "task_id": current_task.id
-                                    }
-                                }
-                        
-                        # Still waiting for more input, but push for responses
-                        return {
-                            "type": "use_tool",
-                            "tool": "send_message_to_channel",
-                            "args": {
-                                "agent_name": agent_model.name,
-                                "channel_name": "#general",
-                                "message": "⏰ I need to hear from EVERYONE on our product direction! Time is MONEY and we need to move FAST! What's your take on what VibeCorp should build?"
-                            },
-                            "task_id": current_task.id
-                        }
                     else:
-                        # First time or not enough responses yet
+                        # Still waiting for more input, nudge the team
                         return {
                             "type": "use_tool",
                             "tool": "send_message_to_channel",
                             "args": {
                                 "agent_name": agent_model.name,
                                 "channel_name": "#general",
-                                "message": "🚀 Team! Time for our GAME-CHANGING brainstorming session! 💡 Let's disrupt the market with our REVOLUTIONARY business idea! What product should VibeCorp build to DOMINATE our industry? I want to hear EVERYONE's thoughts - this is our MOONSHOT moment! 🌟"
+                                "message": "⏰ I need to hear from EVERYONE on our business idea brainstorming! Share your thoughts so we can move forward."
                             },
                             "task_id": current_task.id
                         }
@@ -643,9 +614,8 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                 # Check if we have enough brainstorming input to make a decision
                 brainstorm_messages = await check_brainstorming_progress(agent_model)
                 
-                if len(brainstorm_messages) >= 2:  # Got input from team - reduced threshold
-                    # Time to make a decision and assign tasks
-                    print(f"🎯 CEO {agent_model.name} has enough brainstorming input ({len(brainstorm_messages)} messages), making decision...")
+                # If at least one piece of input exists or we've waited >60 s, proceed
+                if len(brainstorm_messages) >= 2:
                     return {
                         "type": "use_tool",
                         "tool": "make_business_decision",
@@ -655,85 +625,18 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                             "task_id": current_task.id
                         }
                     }
-                elif len(brainstorm_messages) >= 1:
-                    # Check if we've been waiting long enough (1+ minutes) to make decision with any input
-                    if brainstorm_messages:
-                        import datetime
-                        try:
-                            # Parse timestamp (handle various formats)
-                            oldest_message_time_str = brainstorm_messages[-1]["timestamp"]
-                            # Remove Z and replace with +00:00 for UTC
-                            if oldest_message_time_str.endswith('Z'):
-                                oldest_message_time_str = oldest_message_time_str[:-1] + '+00:00'
-                            
-                            oldest_message_time = datetime.datetime.fromisoformat(oldest_message_time_str)
-                            
-                            # Always use timezone-aware comparison
-                            if oldest_message_time.tzinfo is None:
-                                oldest_message_time = oldest_message_time.replace(tzinfo=datetime.timezone.utc)
-                            current_time = datetime.datetime.now(datetime.timezone.utc)
-                            time_elapsed = current_time - oldest_message_time
-                            
-                            # Much shorter timeout - 1 minute
-                            if time_elapsed.total_seconds() > 60:  # 1 minute - force decision
-                                print(f"⏰ CEO {agent_model.name} forcing decision with {len(brainstorm_messages)} messages after {time_elapsed.total_seconds():.0f} seconds")
-                                return {
-                                    "type": "use_tool",
-                                    "tool": "make_business_decision",
-                                    "args": {
-                                        "agent_name": agent_model.name,
-                                        "brainstorm_messages": brainstorm_messages,
-                                        "task_id": current_task.id
-                                    }
-                                }
-                        except Exception as e:
-                            print(f"⚠️ Error parsing timestamp ({oldest_message_time_str}), forcing decision anyway: {e}")
-                            # Force decision if timestamp parsing fails
-                            return {
-                                "type": "use_tool",
-                                "tool": "make_business_decision",
-                                "args": {
-                                    "agent_name": agent_model.name,
-                                    "brainstorm_messages": brainstorm_messages,
-                                    "task_id": current_task.id
-                                }
-                            }
-                    
-                    # If we have messages but timestamp check didn't trigger, prompt for more
-                    return {
-                        "type": "use_tool",
-                        "tool": "send_message_to_channel",
-                        "args": {
-                            "agent_name": agent_model.name,
-                            "channel_name": "#general",
-                            "message": f"⏰ Got some input but need MORE team feedback! We have {len(brainstorm_messages)} responses. What else should we consider for our product strategy?"
-                        },
-                        "task_id": current_task.id
-                    }
-                    
-                    # Still waiting for more input
-                    return {
-                        "type": "use_tool",
-                        "tool": "send_message_to_channel",
-                        "args": {
-                            "agent_name": agent_model.name,
-                            "channel_name": "#general",
-                            "message": f"⏰ Need team input on business direction! We need to decide and start building. What are your thoughts on our product focus?"
-                        },
-                        "task_id": current_task.id
-                    }
-                else:
-                    # No input yet - encourage more participation
-                    return {
-                        "type": "use_tool",
-                        "tool": "send_message_to_channel",
-                        "args": {
-                            "agent_name": agent_model.name,
-                            "channel_name": "#general",
-                            "message": f"🚀 Team! I need your BRILLIANT ideas for our product strategy! This is CRITICAL for our success! What should VibeCorp build to DISRUPT the market?"
-                        },
-                        "task_id": current_task.id
-                    }
+
+                # Otherwise prompt the team again for more input
+                return {
+                    "type": "use_tool",
+                    "tool": "send_message_to_channel",
+                    "args": {
+                        "agent_name": agent_model.name,
+                        "channel_name": "#general",
+                        "message": f"⏰ Need more input to finalize our business idea! Currently have {len(brainstorm_messages)} responses – share your thoughts so we can execute!"
+                    },
+                    "task_id": current_task.id
+                }
             
             # For any CEO with old/stuck tasks, force a decision if enough time has passed
             elif agent_model.role == "CEO":
@@ -892,12 +795,12 @@ async def update_task_progress(task_id: int, tool_name: str):
             
         # For tasks already in progress, only complete if it's a truly deterministic action
         elif task.status == TaskStatus.IN_PROGRESS:
-            # These tools create concrete deliverables and should complete tasks
+            # Tools that create genuine deliverables and should auto-complete a task.
+            # Removed pure-communication tools so brainstorming/review tasks stay open.
             deliverable_creation_tools = [
                 "create_code_file", "create_feature_spec", "build_database_schema", 
                 "create_api_endpoint", "deploy_mvp_feature", "write_to_file",
-                "send_message_to_channel", "send_direct_message", "write_tweet", 
-                "share_update", "ask_for_help"
+                "write_tweet"
             ]
             
             # Auto-complete tasks when agents create actual deliverables
