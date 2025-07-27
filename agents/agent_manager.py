@@ -317,15 +317,14 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
         current_task = todo_list[0]
         print(f"🎯 {agent_model.name} working on: '{current_task.title}' (status: {current_task.status})")
         
-        # If task is already in_progress and it's a communication task, prefer completing it over repeating communication
-        if current_task.status == TaskStatus.IN_PROGRESS and any(keyword in current_task.title.lower() 
-                                                                for keyword in ["brainstorm", "discussion", "clarification", "help"]):
-            # Complete communication-based tasks with a simple action rather than more communication
+        # If task is already in_progress, avoid repeating the same action - mark it as completed instead
+        if current_task.status == TaskStatus.IN_PROGRESS:
+            # Complete in-progress tasks with a simple action rather than repeating the same tool
+            print(f"🔄 {agent_model.name} completing in-progress task: {current_task.title}")
             return {
                 "type": "use_tool",
-                "tool": "get_my_todo_list",
-                "args": {"agent_name": agent_model.name},
-                "task_id": current_task.id
+                "tool": "complete_task",
+                "args": {"agent_name": agent_model.name, "task_id": current_task.id}
             }
         
         # Determine what action to take based on the task and agent role
@@ -458,52 +457,28 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
                 "args": {"agent_name": agent_model.name, "update": f"Great news! I just completed '{completed_task.title}'. What should I focus on next?"}
             }
     
-    # If agent has no pending/in-progress tasks, create meaningful follow-up work instead of just checking todo list
+    # If agent has no pending/in-progress tasks, wait for CEO to assign work (except CEO who can create strategic tasks)
     if not todo_list or not any(t.status in [TaskStatus.PENDING, TaskStatus.IN_PROGRESS] for t in todo_list):
-        # Create role-appropriate follow-up tasks instead of endless todo list checking
+        # Only CEO can create new strategic tasks when they have no work
         if agent_model.role == "CEO":
+            # Check if brainstorming is complete and team needs direction
             return {
                 "type": "use_tool",
                 "tool": "add_task",
                 "args": {
                     "agent_name": agent_model.name,
-                    "title": "Review team progress and strategic priorities",
-                    "description": "Check on team progress, identify bottlenecks, and set strategic direction for next phase",
-                    "priority": 2
+                    "title": "Review team progress and assign next tasks",
+                    "description": "Check on team progress from brainstorming, define business priorities, and assign specific tasks to team members",
+                    "priority": 1
                 }
             }
-        elif agent_model.role == "Programmer":
+        else:
+            # All other agents wait for CEO to assign tasks - no self-generated work
+            print(f"🚫 {agent_model.name} waiting for CEO to assign tasks (no self-generated work)")
             return {
                 "type": "use_tool",
-                "tool": "add_task", 
-                "args": {
-                    "agent_name": agent_model.name,
-                    "title": "Code review and optimization",
-                    "description": "Review existing code, identify optimization opportunities, and improve system performance",
-                    "priority": 3
-                }
-            }
-        elif agent_model.role == "Marketer":
-            return {
-                "type": "use_tool",
-                "tool": "add_task",
-                "args": {
-                    "agent_name": agent_model.name,
-                    "title": "Content creation and brand development",
-                    "description": "Create engaging content, develop brand messaging, and plan marketing campaigns",
-                    "priority": 2
-                }
-            }
-        elif agent_model.role == "HR":
-            return {
-                "type": "use_tool",
-                "tool": "add_task",
-                "args": {
-                    "agent_name": agent_model.name,
-                    "title": "Team wellness and culture assessment",
-                    "description": "Assess team morale, identify culture improvement opportunities, and plan team building initiatives",
-                    "priority": 3
-                }
+                "tool": "get_my_todo_list",
+                "args": {"agent_name": agent_model.name}
             }
     
     # Otherwise, check their todo list (but this should be rare now)
