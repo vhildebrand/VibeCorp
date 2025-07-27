@@ -317,6 +317,17 @@ async def decide_next_action(agent_model: Agent, agent_instance, messages: List[
         current_task = todo_list[0]
         print(f"🎯 {agent_model.name} working on: '{current_task.title}' (status: {current_task.status})")
         
+        # If task is already in_progress and it's a communication task, prefer completing it over repeating communication
+        if current_task.status == TaskStatus.IN_PROGRESS and any(keyword in current_task.title.lower() 
+                                                                for keyword in ["brainstorm", "discussion", "clarification", "help"]):
+            # Complete communication-based tasks with a simple action rather than more communication
+            return {
+                "type": "use_tool",
+                "tool": "get_my_todo_list",
+                "args": {"agent_name": agent_model.name},
+                "task_id": current_task.id
+            }
+        
         # Determine what action to take based on the task and agent role
         # Reduce web searches and add more diverse actions
         if agent_model.role == "CEO":
@@ -566,7 +577,8 @@ async def update_task_progress(task_id: int, tool_name: str):
         # After working on a task, there's a chance to complete it
         elif task.status == TaskStatus.IN_PROGRESS:
             # Some tools indicate task completion
-            completion_tools = ["write_to_file", "post_to_twitter", "manage_budget", "web_search"]
+            completion_tools = ["write_to_file", "write_tweet", "manage_budget", "web_search", 
+                              "send_message_to_channel", "send_direct_message", "ask_for_help", "share_update"]
             
             # 30% chance to complete task after working on it, 80% if using completion tools
             import random
