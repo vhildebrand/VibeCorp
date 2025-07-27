@@ -4,17 +4,16 @@ import TodoList from './TodoList';
 
 interface AgentProfileProps {
   agentId: number;
-  onClose?: () => void;
 }
 
-const AgentProfile: React.FC<AgentProfileProps> = ({ agentId, onClose }) => {
-  const { agents } = useAppStore();
+const AgentProfile: React.FC<AgentProfileProps> = ({ agentId }) => {
+  const { agents, setSelectedAgent } = useAppStore();
   
   const agent = agents.find(a => a.id === agentId);
   
   if (!agent) {
     return (
-      <div className="p-6 text-center text-gray-400">
+      <div className="h-full bg-gray-800 border-l border-gray-700 p-6 text-center text-gray-400">
         <div className="text-4xl mb-2">🤖</div>
         <p>Agent not found</p>
       </div>
@@ -38,50 +37,44 @@ const AgentProfile: React.FC<AgentProfileProps> = ({ agentId, onClose }) => {
   };
 
   return (
-    <div className="bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
+    <div className="h-full bg-gray-800 border-l border-gray-700 flex flex-col">
       {/* Header */}
-      <div className="bg-gray-800 px-6 py-4 border-b border-gray-700">
+      <div className="bg-gray-900 px-4 py-3 border-b border-gray-700 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <div className="relative">
-              <span className="text-3xl">{agent.avatar}</span>
-              <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-gray-800 ${getStatusColor(agent.status)}`} />
+              <span className="text-2xl">{agent.avatar}</span>
+              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-800 ${getStatusColor(agent.status)}`} />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-lg font-bold text-white">
                 {formatAgentName(agent.name)}
               </h2>
-              <p className="text-sm text-gray-400 capitalize">
+              <p className="text-xs text-gray-400 capitalize">
                 {agent.role} • {agent.status.replace(/_/g, ' ')}
               </p>
             </div>
           </div>
           
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
-              title="Close profile"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
+          <button
+            onClick={() => setSelectedAgent(null)}
+            className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            title="Close profile"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+      <div className="flex-1 overflow-y-auto p-4">
         {/* Agent Info */}
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold text-white mb-3">About</h3>
-          <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-            <p className="text-sm text-gray-300 leading-relaxed">
-              {agent.persona}
-            </p>
-            
-            <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-white mb-2">Status</h3>
+          <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
+            <div className="text-xs text-gray-300 space-y-1">
               <div>
                 <span className="text-gray-400">Role:</span>
                 <span className="text-white ml-2 font-medium">{agent.role}</span>
@@ -96,15 +89,15 @@ const AgentProfile: React.FC<AgentProfileProps> = ({ agentId, onClose }) => {
             
             {agent.lastStatusUpdate && (
               <div className="mt-2 text-xs text-gray-500">
-                Last updated: {new Date(agent.lastStatusUpdate).toLocaleString()}
+                Updated: {new Date(agent.lastStatusUpdate).toLocaleString()}
               </div>
             )}
           </div>
         </div>
 
         {/* To-Do List */}
-        <div>
-          <TodoList agentId={agentId} />
+        <div className="flex-1">
+          <TodoList agentId={agentId} className="h-full" />
         </div>
       </div>
     </div>

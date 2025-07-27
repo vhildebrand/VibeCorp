@@ -5,15 +5,43 @@ import ChannelList from './ChannelList';
 import AgentProfile from './AgentProfile';
 
 const Sidebar: React.FC = () => {
-  const { agents, sidebarCollapsed, toggleSidebar } = useAppStore();
-  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
-
+  const { 
+    conversations, 
+    agents, 
+    sidebarCollapsed, 
+    toggleSidebar,
+    selectedAgentId,
+    setSelectedAgent
+  } = useAppStore();
+  
   const handleAgentClick = (agentId: number) => {
-    setSelectedAgentId(agentId);
+    // Toggle agent profile panel
+    if (selectedAgentId === agentId) {
+      setSelectedAgent(null); // Close if same agent clicked
+    } else {
+      setSelectedAgent(agentId); // Open agent profile
+    }
   };
 
   const handleCloseProfile = () => {
-    setSelectedAgentId(null);
+    setSelectedAgent(null);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'idle':
+        return 'bg-gray-500';
+      case 'coding':
+        return 'bg-red-500';
+      case 'in_meeting':
+        return 'bg-yellow-500';
+      case 'tweeting':
+        return 'bg-green-500';
+      case 'researching':
+        return 'bg-blue-500';
+      default:
+        return 'bg-purple-500';
+    }
   };
 
   return (
@@ -52,33 +80,14 @@ const Sidebar: React.FC = () => {
                 <button
                   key={agent.id}
                   onClick={() => handleAgentClick(agent.id)}
-                  className="w-full flex items-center space-x-3 p-2 rounded hover:bg-gray-700 transition-colors text-left"
-                  title={`View ${agent.name.replace(/_/g, ' ')}'s profile and tasks`}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all duration-200 ${
+                    selectedAgentId === agent.id 
+                      ? 'ring-2 ring-blue-500 transform scale-110' 
+                      : 'hover:transform hover:scale-105'
+                  } ${getStatusColor(agent.status)}`}
+                  title={`${agent.name.replace(/_/g, ' ')} (${agent.role}) - ${agent.status}`}
                 >
-                  <div className="relative">
-                    <span className="text-lg">{agent.avatar}</span>
-                    <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-gray-800 ${
-                      agent.status === 'idle' ? 'bg-gray-500' :
-                      agent.status === 'coding' ? 'bg-red-500' :
-                      agent.status === 'in_meeting' ? 'bg-yellow-500' :
-                      agent.status === 'tweeting' ? 'bg-green-500' :
-                      agent.status === 'researching' ? 'bg-blue-500' :
-                      'bg-purple-500'
-                    }`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${agent.color} truncate`}>
-                      {agent.name.replace(/_/g, ' ')}
-                    </p>
-                    <p className="text-xs text-gray-400 capitalize">
-                      {agent.status.replace(/_/g, ' ')}
-                    </p>
-                  </div>
-                  <div className="text-gray-500">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                  {agent.avatar}
                 </button>
               ))}
             </div>
@@ -90,13 +99,6 @@ const Sidebar: React.FC = () => {
           <ChannelList />
         </div>
       </div>
-
-      {/* Agent Profile Modal */}
-      {selectedAgentId && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <AgentProfile agentId={selectedAgentId} onClose={handleCloseProfile} />
-        </div>
-      )}
     </>
   );
 };

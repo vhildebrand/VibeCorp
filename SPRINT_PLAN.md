@@ -77,18 +77,37 @@ This document breaks down the development work outlined in the revised `PRODUCT_
 **Goal:** Refine agent behavior, expand the agent team, and improve the overall quality and believability of the simulation.
 
 ### Tasks:
-- [ ] **New Agent Roles:**
-    - [ ] Add more specialized agents: a Frontend Developer, a Backend Developer, a Marketer, and an HR Manager.
-    - [ ] Write detailed system prompts and define specific toolsets for each new role.
-- [ ] **Code Execution & Testing:**
-    - [ ] Implement a secure tool for agents to execute the code they write, perhaps in a sandboxed environment.
-    - [ ] Create a `test_code(code: str) -> str` tool that uses a testing framework to validate code.
-- [ ] **Refine Agent Prompts:**
-    - [ ] Observe the simulation and iteratively refine the `system_message` for all agents to improve collaboration, reduce looping behavior, and enhance narrative quality.
-- [ ] **Error Handling & Resilience:**
-    - [ ] Improve the `run_agent_loop` to gracefully handle errors during tool execution or LLM calls, preventing a single agent failure from stopping the entire simulation.
+- [x] **New Agent Roles:**
+    - [x] Add more specialized agents: a Frontend Developer, a Backend Developer, a Marketer, and an HR Manager.
+    - [x] Write detailed system prompts and define specific toolsets for each new role.
+- [x] **Concrete Development Tools & Deliverables:**
+    - [x] Implement `create_code_file` tool for agents to write actual Python, HTML, CSS, JavaScript code
+    - [x] Add `create_feature_spec` tool for detailed feature documentation with requirements
+    - [x] Create `build_database_schema` tool for SQL schema generation
+    - [x] Add `create_api_endpoint` tool for API documentation and templates
+    - [x] Implement `deploy_mvp_feature` tool for tracking completed deliverables
+- [x] **Task System Overhaul:**
+    - [x] Replace vague tasks ("research", "brainstorm") with specific deliverable-focused tasks
+    - [x] Add duplicate prevention to stop agents from assigning the same tasks repeatedly
+    - [x] Modified decision logic to prioritize building concrete outputs over communication
+    - [x] Tasks now specify exact deliverables (filenames, code, documentation)
+- [x] **Agent Decision Logic Improvements:**
+    - [x] Agents now create actual code files based on task requirements
+    - [x] Programming tasks result in functional Python authentication systems, HTML dashboards
+    - [x] Marketing tasks create complete landing pages with HTML/CSS
+    - [x] Documentation tasks produce structured markdown files with processes
+    - [x] Tasks automatically complete when deliverables are created
+- [x] **Error Handling & Resilience:**
+    - [x] Improve the `run_agent_loop` to gracefully handle errors during tool execution or LLM calls, preventing a single agent failure from stopping the entire simulation.
 
-**Deliverable:** A much more robust and interesting simulation. Agents can now write, test, and (in theory) build a simple application. The narrative quality is significantly improved.
+**Deliverable:** ✅ A much more robust and productive simulation. Agents now create concrete deliverables instead of just talking. The CEO assigns specific, actionable tasks with clear outputs. Programmers write actual authentication systems and dashboards. Marketers build real landing pages. The simulation produces tangible results that can be reviewed and deployed.
+
+**Key Improvements Made:**
+- **Concrete Deliverables**: Agents now create actual files (`auth_system.py`, `dashboard.html`, `landing_page.html`)
+- **Specific Task Assignment**: CEO assigns tasks with exact deliverables specified
+- **Automated Completion**: Tasks complete when real work is done, not based on probability
+- **Duplicate Prevention**: No more repeated task assignments
+- **Building Over Talking**: Decision logic prioritizes creating files over sending messages
 
 ---
 

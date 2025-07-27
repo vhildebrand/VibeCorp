@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 from sqlmodel import Session, select
 from agents.status_tool import set_agent_status
 from agents.communication_tools import send_message_to_channel, send_direct_message, ask_for_help, share_update
@@ -200,6 +200,31 @@ def assign_task_to_agent(assigner_name: str, assignee_name: str, title: str, des
                 return f"❌ Assigner '{assigner_name}' not found"
             if not assignee:
                 return f"❌ Assignee '{assignee_name}' not found"
+            
+            # Check for duplicate tasks - look for similar titles and descriptions
+            existing_tasks = session.exec(
+                select(AgentTask)
+                .where(AgentTask.agent_id == assignee.id)
+                .where(AgentTask.status.in_([TaskStatus.PENDING, TaskStatus.IN_PROGRESS]))
+            ).all()
+            
+            # Check for exact title matches or very similar tasks
+            for existing_task in existing_tasks:
+                # Exact title match
+                if existing_task.title.lower().strip() == title.lower().strip():
+                    return f"⚠️ Similar task already exists for {assignee_name}: '{existing_task.title}' (ID: {existing_task.id}). Not creating duplicate."
+                
+                # Check for similar content in title/description (keyword overlap)
+                title_words = set(title.lower().split())
+                existing_title_words = set(existing_task.title.lower().split())
+                
+                # If there's significant overlap in keywords (>60% common words)
+                if len(title_words) > 2 and len(existing_title_words) > 2:
+                    common_words = title_words.intersection(existing_title_words)
+                    overlap_ratio = len(common_words) / max(len(title_words), len(existing_title_words))
+                    
+                    if overlap_ratio > 0.6:
+                        return f"⚠️ Very similar task already exists for {assignee_name}: '{existing_task.title}' vs '{title}'. Not creating potential duplicate."
             
             # Create task for the assignee
             task = AgentTask(
@@ -761,6 +786,408 @@ def manage_budget(action: str, amount: Optional[float] = None, description: Opti
         return f"❌ Error managing budget: {str(e)}"
 
 
+def make_business_decision(agent_name: str, brainstorm_messages: List[Dict], task_id: int) -> str:
+    """
+    Allow the CEO to analyze brainstorming input and make business decisions.
+    
+    Args:
+        agent_name (str): The name of the decision-making agent (should be CEO)
+        brainstorm_messages (List[Dict]): Recent brainstorming messages from team
+        task_id (int): ID of the current review task to complete
+        
+    Returns:
+        str: Decision summary and next steps
+    """
+    try:
+        # Analyze the brainstorming input
+        ideas = []
+        for msg in brainstorm_messages:
+            role = msg.get("role", "Unknown")
+            content = msg.get("content", "")
+            
+            # Extract key ideas from each message
+            if "saas" in content.lower() or "platform" in content.lower():
+                ideas.append(f"{role}: SaaS/Platform solution")
+            elif "productivity" in content.lower() or "workflow" in content.lower():
+                ideas.append(f"{role}: Productivity/Workflow tools")
+            elif "hr" in content.lower() or "employee" in content.lower():
+                ideas.append(f"{role}: HR/Employee engagement")
+            elif "collaboration" in content.lower() or "team" in content.lower():
+                ideas.append(f"{role}: Team collaboration tools")
+            else:
+                ideas.append(f"{role}: {content[:50]}...")
+        
+        # Make the business decision (CEO chooses based on input)
+        # Analyze team input to pick the most mentioned/supported idea
+        idea_counts = {}
+        for msg in brainstorm_messages:
+            content = msg.get("content", "").lower()
+            if "saas" in content or "platform" in content:
+                idea_counts["SaaS Platform"] = idea_counts.get("SaaS Platform", 0) + 1
+            if "productivity" in content or "workflow" in content:
+                idea_counts["Productivity Tools"] = idea_counts.get("Productivity Tools", 0) + 1
+            if "collaboration" in content or "team" in content:
+                idea_counts["Team Collaboration"] = idea_counts.get("Team Collaboration", 0) + 1
+            if "hr" in content or "employee" in content:
+                idea_counts["HR Tech"] = idea_counts.get("HR Tech", 0) + 1
+        
+        # Pick the most mentioned concept, with fallback
+        if idea_counts:
+            chosen_concept = max(idea_counts.keys(), key=lambda x: idea_counts[x])
+            decision = f"{chosen_concept} for Small Businesses"
+            rationale = f"Based on team input, '{chosen_concept}' was the most discussed concept ({idea_counts[chosen_concept]} mentions). We'll build a SaaS solution focused on this area."
+        else:
+            # Fallback if no clear pattern
+            decision = "Team Productivity SaaS Platform"
+            rationale = "Based on general team input, we'll build a SaaS platform for small business workflow automation with team collaboration features."
+        
+        # Create decision summary
+        decision_summary = f"""# VibeCorp Business Decision
+
+## Chosen Direction: {decision}
+
+## Rationale: 
+{rationale}
+
+## Team Input Considered:
+"""
+        for idea in ideas:
+            decision_summary += f"- {idea}\n"
+        
+        decision_summary += f"""
+## Next Steps:
+- Programmer: Set up initial project repository and technical architecture
+- Marketer: Draft initial marketing strategy and target audience analysis  
+- HR: Plan team structure and hiring needs for development phase
+- CEO: Oversee execution and remove blockers
+
+Decision made on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
+"""
+        
+        # Save decision to project folder
+        os.makedirs("workspace/project", exist_ok=True)
+        with open("workspace/project/business_decision.md", "w") as f:
+            f.write(decision_summary)
+        
+        # Complete the current review task
+        with Session(engine) as session:
+            agent = session.exec(select(Agent).where(Agent.name == agent_name)).first()
+            if agent:
+                task = session.exec(
+                    select(AgentTask)
+                    .where(AgentTask.id == task_id)
+                    .where(AgentTask.agent_id == agent.id)
+                ).first()
+                
+                if task:
+                    task.status = TaskStatus.COMPLETED
+                    session.add(task)
+                    session.commit()
+        
+        # Assign specific tasks to team members
+        task_assignments = [
+            {
+                "assignee": "Penny_The_Programmer",
+                "title": "Create user authentication system",
+                "description": "Build login/signup functionality with database schema, API endpoints, and security measures. Deliverables: auth.py, user_schema.sql, /api/auth endpoints",
+                "priority": 1
+            },
+            {
+                "assignee": "Penny_The_Programmer",
+                "title": "Build core product dashboard",
+                "description": "Create main application interface with user dashboard, navigation, and core features. Deliverables: dashboard.html, app.js, main.css",
+                "priority": 2
+            },
+            {
+                "assignee": "Marty_The_Marketer", 
+                "title": "Create landing page and marketing site",
+                "description": "Design and build marketing website with clear value proposition, pricing, and conversion funnel. Deliverables: index.html, marketing.css, conversion tracking",
+                "priority": 1
+            },
+            {
+                "assignee": "Marty_The_Marketer",
+                "title": "Launch initial marketing campaign",
+                "description": "Create social media presence, initial content, and user acquisition strategy. Deliverables: social accounts, 10 posts, email campaign",
+                "priority": 2
+            },
+            {
+                "assignee": "Hannah_The_HR",
+                "title": "Document development processes",
+                "description": "Create development workflow, code review process, and team collaboration guidelines. Deliverables: dev_process.md, code_review_checklist.md",
+                "priority": 3
+            }
+        ]
+        
+        # Create the tasks
+        assigned_count = 0
+        for assignment in task_assignments:
+            # Check if agent already has a similar task to avoid duplicates
+            result = assign_task_to_agent(
+                assigner_name=agent_name,
+                assignee_name=assignment["assignee"],
+                title=assignment["title"],
+                description=assignment["description"],
+                priority=assignment["priority"]
+            )
+            if "✅" in result:
+                assigned_count += 1
+            elif "⚠️" in result:
+                print(f"Skipped duplicate task: {result}")
+                # Don't count as failure, just skip
+        
+        return f"""✅ Business Decision Made: {decision}
+
+📄 Decision document saved to workspace/project/business_decision.md
+
+🎯 Assigned {assigned_count} specific tasks to team members:
+- Programmer: Technical architecture setup
+- Marketer: Market analysis and strategy  
+- HR: Team planning and hiring
+
+🚀 Moving from brainstorming to execution phase! Team now has clear direction and actionable tasks."""
+        
+    except Exception as e:
+        return f"❌ Error making business decision: {str(e)}"
+
+
+# ==============================================================================
+# Development & Building Tools
+# ==============================================================================
+
+def create_code_file(agent_name: str, filename: str, code_content: str, language: str = "python") -> str:
+    """
+    Create a specific code file with actual implementation.
+    
+    Args:
+        agent_name (str): The agent creating the code
+        filename (str): Name of the file to create
+        code_content (str): The actual code content
+        language (str): Programming language (python, javascript, html, css, etc.)
+        
+    Returns:
+        str: Confirmation with file details
+    """
+    try:
+        # Determine file extension based on language
+        extensions = {
+            "python": ".py",
+            "javascript": ".js", 
+            "html": ".html",
+            "css": ".css",
+            "sql": ".sql",
+            "markdown": ".md",
+            "json": ".json"
+        }
+        
+        if not filename.endswith(extensions.get(language, "")):
+            filename += extensions.get(language, ".txt")
+        
+        # Save to project folder
+        project_path = os.path.join("workspace/project", filename)
+        os.makedirs(os.path.dirname(project_path), exist_ok=True)
+        
+        with open(project_path, 'w') as f:
+            f.write(code_content)
+        
+        # Also save to agent's personal folder for tracking
+        agent_path = os.path.join(f"workspace/agents/{agent_name}", filename)
+        os.makedirs(os.path.dirname(agent_path), exist_ok=True)
+        
+        with open(agent_path, 'w') as f:
+            f.write(code_content)
+        
+        return f"✅ Created {language} file: {filename} ({len(code_content)} characters)\n📁 Saved to: {project_path}\n🔧 Language: {language}\n💻 Ready for team review and testing!"
+        
+    except Exception as e:
+        return f"❌ Error creating code file: {str(e)}"
+
+
+def create_feature_spec(agent_name: str, feature_name: str, description: str, requirements: List[str]) -> str:
+    """
+    Create a detailed feature specification document.
+    
+    Args:
+        agent_name (str): The agent creating the spec
+        feature_name (str): Name of the feature
+        description (str): Feature description
+        requirements (List[str]): List of specific requirements
+        
+    Returns:
+        str: Confirmation with spec details
+    """
+    try:
+        spec_content = f"""# {feature_name} Feature Specification
+
+## Overview
+{description}
+
+## Requirements
+"""
+        for i, req in enumerate(requirements, 1):
+            spec_content += f"{i}. {req}\n"
+        
+        spec_content += f"""
+## Technical Notes
+- Created by: {agent_name}
+- Created on: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
+- Status: Draft
+
+## Implementation Checklist
+- [ ] Database schema design
+- [ ] API endpoint implementation  
+- [ ] Frontend component creation
+- [ ] Testing and validation
+- [ ] Documentation updates
+"""
+        
+        filename = f"{feature_name.lower().replace(' ', '_')}_spec.md"
+        spec_path = os.path.join("workspace/project/specs", filename)
+        os.makedirs(os.path.dirname(spec_path), exist_ok=True)
+        
+        with open(spec_path, 'w') as f:
+            f.write(spec_content)
+        
+        return f"✅ Created feature spec: {feature_name}\n📋 Requirements: {len(requirements)} items\n📁 Saved to: {spec_path}\n🎯 Ready for development team to implement!"
+        
+    except Exception as e:
+        return f"❌ Error creating feature spec: {str(e)}"
+
+
+def build_database_schema(agent_name: str, schema_name: str, tables: Dict[str, List[str]]) -> str:
+    """
+    Create a database schema file with table definitions.
+    
+    Args:
+        agent_name (str): The agent creating the schema
+        schema_name (str): Name of the schema/database
+        tables (Dict[str, List[str]]): Table names and their columns
+        
+    Returns:
+        str: Confirmation with schema details
+    """
+    try:
+        sql_content = f"-- {schema_name} Database Schema\n"
+        sql_content += f"-- Created by: {agent_name}\n"
+        sql_content += f"-- Created on: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
+        
+        for table_name, columns in tables.items():
+            sql_content += f"CREATE TABLE {table_name} (\n"
+            for i, column in enumerate(columns):
+                sql_content += f"    {column}"
+                if i < len(columns) - 1:
+                    sql_content += ","
+                sql_content += "\n"
+            sql_content += ");\n\n"
+        
+        filename = f"{schema_name.lower()}_schema.sql"
+        schema_path = os.path.join("workspace/project/database", filename)
+        os.makedirs(os.path.dirname(schema_path), exist_ok=True)
+        
+        with open(schema_path, 'w') as f:
+            f.write(sql_content)
+        
+        return f"✅ Created database schema: {schema_name}\n🗄️ Tables: {len(tables)} defined\n📁 Saved to: {schema_path}\n💾 Ready for database implementation!"
+        
+    except Exception as e:
+        return f"❌ Error creating database schema: {str(e)}"
+
+
+def create_api_endpoint(agent_name: str, endpoint_name: str, method: str, description: str, parameters: List[str]) -> str:
+    """
+    Create a documented API endpoint specification.
+    
+    Args:
+        agent_name (str): The agent creating the endpoint
+        endpoint_name (str): API endpoint path (e.g., "/api/users")
+        method (str): HTTP method (GET, POST, PUT, DELETE)
+        description (str): What the endpoint does
+        parameters (List[str]): Required parameters
+        
+    Returns:
+        str: Confirmation with endpoint details
+    """
+    try:
+        api_content = f"""# API Endpoint: {endpoint_name}
+
+**Method:** {method}
+**Description:** {description}
+
+## Parameters
+"""
+        for param in parameters:
+            api_content += f"- {param}\n"
+        
+        api_content += f"""
+## Implementation Notes
+- Created by: {agent_name}
+- Created on: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
+- Status: Specification complete, ready for implementation
+
+## Example Code Template
+```python
+@app.{method.lower()}('{endpoint_name}')
+async def {endpoint_name.replace('/', '_').replace('-', '_')}():
+    # TODO: Implement {description}
+    pass
+```
+"""
+        
+        filename = f"{endpoint_name.replace('/', '_').replace('-', '_')}_api.md"
+        api_path = os.path.join("workspace/project/api_docs", filename)
+        os.makedirs(os.path.dirname(api_path), exist_ok=True)
+        
+        with open(api_path, 'w') as f:
+            f.write(api_content)
+        
+        return f"✅ Created API endpoint spec: {method} {endpoint_name}\n📝 Parameters: {len(parameters)} defined\n📁 Saved to: {api_path}\n🚀 Ready for backend implementation!"
+        
+    except Exception as e:
+        return f"❌ Error creating API endpoint: {str(e)}"
+
+
+def deploy_mvp_feature(agent_name: str, feature_name: str, files_created: List[str]) -> str:
+    """
+    Mark a feature as deployed to MVP and track deliverables.
+    
+    Args:
+        agent_name (str): The agent deploying the feature
+        feature_name (str): Name of the feature being deployed
+        files_created (List[str]): List of files that make up this feature
+        
+    Returns:
+        str: Deployment confirmation
+    """
+    try:
+        deployment_info = {
+            "feature_name": feature_name,
+            "deployed_by": agent_name,
+            "deployment_time": datetime.utcnow().isoformat(),
+            "files_included": files_created,
+            "status": "deployed_to_mvp",
+            "version": "0.1.0"
+        }
+        
+        # Create deployment record
+        deployments_file = "workspace/project/deployments.json"
+        os.makedirs("workspace/project", exist_ok=True)
+        
+        if os.path.exists(deployments_file):
+            with open(deployments_file, 'r') as f:
+                deployments = json.load(f)
+        else:
+            deployments = {"mvp_features": []}
+        
+        deployments["mvp_features"].append(deployment_info)
+        
+        with open(deployments_file, 'w') as f:
+            json.dump(deployments, f, indent=2)
+        
+        return f"🚀 DEPLOYED: {feature_name} to MVP!\n📦 Files: {len(files_created)} included\n⏰ Deployed: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}\n🎯 Feature now live and ready for user testing!"
+        
+    except Exception as e:
+        return f"❌ Error deploying feature: {str(e)}"
+
+
 # ==============================================================================
 # Tool Registry
 # ==============================================================================
@@ -773,6 +1200,13 @@ AVAILABLE_TOOLS = {
     "get_my_todo_list": get_my_todo_list,
     "update_task_status": update_task_status,
     "assign_task_to_agent": assign_task_to_agent,
+    
+    # Development & Building Tools
+    "create_code_file": create_code_file,
+    "create_feature_spec": create_feature_spec,
+    "build_database_schema": build_database_schema,
+    "create_api_endpoint": create_api_endpoint,
+    "deploy_mvp_feature": deploy_mvp_feature,
     
     # Organized Filesystem Tools
     "write_to_file": write_to_file,
@@ -791,6 +1225,7 @@ AVAILABLE_TOOLS = {
     
     # Business Tools
     "manage_budget": manage_budget,
+    "make_business_decision": make_business_decision,
     
     # Status Tools
     "set_agent_status": set_agent_status

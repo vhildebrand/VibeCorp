@@ -64,6 +64,7 @@ interface AppState {
   tasks: Task[];
   agentTasks: Record<number, AgentTask[]>; // agentId -> tasks
   activeConversationId: number | null;
+  selectedAgentId: number | null; // For agent profile panel
   sidebarCollapsed: boolean;
   
   // Loading states
@@ -84,6 +85,7 @@ interface AppState {
   
   // Actions
   setActiveConversation: (id: number) => void;
+  setSelectedAgent: (id: number | null) => void;
   toggleSidebar: () => void;
   markConversationAsRead: (id: number) => void;
   addMessage: (message: Omit<Message, 'id'>) => void;
@@ -284,6 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tasks: [],
   agentTasks: {}, // Initialize agentTasks as an empty object
   activeConversationId: null, // Will be set after conversations load
+  selectedAgentId: null, // No agent profile shown initially
   sidebarCollapsed: false,
   
   // Loading states
@@ -309,6 +312,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().markConversationAsRead(id);
     // Load messages for this conversation
     get().loadConversationMessages(id);
+  },
+  
+  setSelectedAgent: (id: number | null) => {
+    set({ selectedAgentId: id });
+    // Load agent tasks when selecting an agent
+    if (id) {
+      get().loadAgentTasks(id);
+    }
   },
   
   toggleSidebar: () => set((state) => ({ 
@@ -502,6 +513,25 @@ export const useAppStore = create<AppState>((set, get) => ({
               timestamp: messageData.timestamp,
               type: messageData.type || 'message',
             };
+            
+            // Check if message already exists to prevent duplicates
+            const existingMessage = currentState.messages.find(msg => msg.id === newMessage.id);
+            if (existingMessage) {
+              console.log('Duplicate message ignored:', newMessage.id);
+              break;
+            }
+            
+            // Additional check for content-based duplicates (in case IDs differ)
+            const contentDuplicate = currentState.messages.find(msg => 
+              msg.conversationId === newMessage.conversationId &&
+              msg.agentId === newMessage.agentId &&
+              msg.content === newMessage.content &&
+              Math.abs(new Date(msg.timestamp).getTime() - new Date(newMessage.timestamp).getTime()) < 5000 // Within 5 seconds
+            );
+            if (contentDuplicate) {
+              console.log('Content-based duplicate message ignored:', newMessage.content.substring(0, 50));
+              break;
+            }
             
             // Add directly to messages array and update conversation
             set((state) => ({

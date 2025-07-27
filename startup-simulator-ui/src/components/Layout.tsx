@@ -3,9 +3,10 @@ import { useAppStore } from '../store';
 import Sidebar from './Sidebar';
 import ChatPane from './ChatPane';
 import ActivityFeed from './ActivityFeed';
+import AgentProfile from './AgentProfile';
 
 const Layout: React.FC = () => {
-  const sidebarCollapsed = useAppStore((state) => state.sidebarCollapsed);
+  const { sidebarCollapsed, selectedAgentId } = useAppStore();
 
   return (
     <div className="flex h-screen bg-gray-900 text-white overflow-hidden">
@@ -21,9 +22,13 @@ const Layout: React.FC = () => {
         <ChatPane />
       </div>
       
-      {/* Right Activity Feed */}
+      {/* Right Panel - Agent Profile or Activity Feed */}
       <div className="w-80 flex-shrink-0 hidden lg:block">
-        <ActivityFeed />
+        {selectedAgentId ? (
+          <AgentProfile agentId={selectedAgentId} />
+        ) : (
+          <ActivityFeed />
+        )}
       </div>
     </div>
   );

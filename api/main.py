@@ -109,6 +109,35 @@ async def lifespan(app: FastAPI):
     with open(twitter_feed_path, "w") as f:
         json.dump(fresh_twitter_feed, f, indent=2)
     
+    # Complete workspace reset for fresh start
+    print("🧹 Resetting complete workspace...")
+    workspace_path = "workspace"
+    if os.path.exists(workspace_path):
+        import shutil
+        shutil.rmtree(workspace_path)
+        print(f"🗑️ Deleted existing workspace: {workspace_path}")
+    
+    # Recreate workspace structure
+    os.makedirs("workspace/agents", exist_ok=True)
+    os.makedirs("workspace/project", exist_ok=True) 
+    os.makedirs("workspace/shared", exist_ok=True)
+    os.makedirs("workspace/docs", exist_ok=True)
+    
+    # Create fresh twitter feed
+    with open(twitter_feed_path, "w") as f:
+        json.dump(fresh_twitter_feed, f, indent=2)
+    
+    # Create fresh company budget
+    fresh_budget = {
+        "current_balance": 100000.0,
+        "transactions": [],
+        "monthly_burn_rate": 15000.0
+    }
+    with open("workspace/company_budget.json", "w") as f:
+        json.dump(fresh_budget, f, indent=2)
+    
+    print("✅ Complete workspace reset finished")
+    
     # Create aiohttp session
     http_session = aiohttp.ClientSession()
     

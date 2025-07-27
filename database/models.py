@@ -1,4 +1,5 @@
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, Column
+from sqlalchemy import JSON
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -45,6 +46,8 @@ class Conversation(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     description: str
+    type: ConversationType = Field(default=ConversationType.GROUP)
+    members: List[int] = Field(default_factory=list, sa_column=Column(JSON))
     
     messages: List["Message"] = Relationship(back_populates="conversation")
 

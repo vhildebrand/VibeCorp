@@ -79,15 +79,33 @@ def seed_initial_data():
         conversations = [
             Conversation(
                 name="#general",
-                description="Main company-wide discussion channel"
+                description="Main company-wide discussion channel",
+                type="group",
+                members=[1, 2, 3, 4]  # All agents
             ),
             Conversation(
                 name="#random", 
-                description="Off-topic discussions and water cooler chat"
+                description="Off-topic discussions and water cooler chat",
+                type="group",
+                members=[1, 2, 3, 4]  # All agents
             ),
             Conversation(
                 name="#engineering",
-                description="Technical discussions and code-related collaboration"
+                description="Technical discussions and code-related collaboration",
+                type="group", 
+                members=[1, 3]  # CEO and Programmer
+            ),
+            Conversation(
+                name="#programming",
+                description="Dedicated coding workspace with syntax highlighting and dev tools",
+                type="group",
+                members=[3]  # Just Programmer initially, others can be added
+            ),
+            Conversation(
+                name="#marketing",
+                description="Marketing campaigns, social media, and growth strategies",
+                type="group",
+                members=[1, 2]  # CEO and Marketer
             )
         ]
 
