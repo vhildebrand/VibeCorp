@@ -71,6 +71,8 @@ const getAgentAvatar = (name: string): string => {
       return '📱';
     case 'Penny_The_Programmer':
       return '💻';
+    case 'Paige_The_Programmer':
+      return '🔒'; // Security-focused programmer
     case 'Herb_From_HR':
       return '🤝';
     default:
@@ -87,6 +89,8 @@ const getAgentColor = (name: string): string => {
       return 'text-green-400';
     case 'Penny_The_Programmer':
       return 'text-red-400';
+    case 'Paige_The_Programmer':
+      return 'text-purple-400'; // Security-focused programmer
     case 'Herb_From_HR':
       return 'text-yellow-400';
     default:

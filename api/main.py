@@ -587,6 +587,291 @@ def get_agent_tasks(agent_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching agent tasks: {str(e)}")
 
+
+# Workspace File Browser Endpoints
+class FileItem(BaseModel):
+    name: str
+    path: str
+    type: str  # "file" or "directory"
+    size: Optional[int] = None
+    modified: Optional[str] = None
+
+class DirectoryListing(BaseModel):
+    path: str
+    items: List[FileItem]
+
+@app.get("/workspace", response_model=DirectoryListing)
+async def browse_workspace_root():
+    """Browse the root workspace directory."""
+    return await browse_workspace_directory("")
+
+@app.get("/workspace/browse", response_model=DirectoryListing)
+async def browse_workspace_directory(path: str = ""):
+    """Browse a specific directory in the workspace."""
+    try:
+        # Ensure path is safe and within workspace
+        workspace_root = os.path.abspath("workspace")
+        if path:
+            # Remove leading slash and resolve path
+            clean_path = path.lstrip("/")
+            full_path = os.path.abspath(os.path.join(workspace_root, clean_path))
+        else:
+            full_path = workspace_root
+        
+        # Security check: ensure path is within workspace
+        if not full_path.startswith(workspace_root):
+            raise HTTPException(status_code=403, detail="Access denied: path outside workspace")
+        
+        # Check if directory exists
+        if not os.path.exists(full_path):
+            raise HTTPException(status_code=404, detail="Directory not found")
+        
+        if not os.path.isdir(full_path):
+            raise HTTPException(status_code=400, detail="Path is not a directory")
+        
+        # List directory contents
+        items = []
+        try:
+            for item_name in sorted(os.listdir(full_path)):
+                item_path = os.path.join(full_path, item_name)
+                relative_path = os.path.relpath(item_path, workspace_root)
+                
+                # Skip hidden files and system files
+                if item_name.startswith('.'):
+                    continue
+                
+                stat_info = os.stat(item_path)
+                
+                file_item = FileItem(
+                    name=item_name,
+                    path=relative_path.replace("\\", "/"),  # Normalize path separators
+                    type="directory" if os.path.isdir(item_path) else "file",
+                    size=stat_info.st_size if os.path.isfile(item_path) else None,
+                    modified=str(int(stat_info.st_mtime))
+                )
+                items.append(file_item)
+        except PermissionError:
+            raise HTTPException(status_code=403, detail="Permission denied")
+        
+        return DirectoryListing(
+            path=path,
+            items=items
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error browsing directory: {str(e)}")
+
+@app.get("/workspace/file")
+async def read_workspace_file(path: str):
+    """Read the contents of a file in the workspace."""
+    try:
+        # Ensure path is safe and within workspace
+        workspace_root = os.path.abspath("workspace")
+        clean_path = path.lstrip("/")
+        full_path = os.path.abspath(os.path.join(workspace_root, clean_path))
+        
+        # Security check: ensure path is within workspace
+        if not full_path.startswith(workspace_root):
+            raise HTTPException(status_code=403, detail="Access denied: path outside workspace")
+        
+        # Check if file exists
+        if not os.path.exists(full_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        if not os.path.isfile(full_path):
+            raise HTTPException(status_code=400, detail="Path is not a file")
+        
+        # Get file info
+        stat_info = os.stat(full_path)
+        file_size = stat_info.st_size
+        
+        # Check file size limit (10MB)
+        if file_size > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File too large (max 10MB)")
+        
+        # Determine if file is likely text or binary
+        def is_binary_file(filepath):
+            """Check if file is binary by reading first 1024 bytes."""
+            try:
+                with open(filepath, 'rb') as f:
+                    chunk = f.read(1024)
+                    return b'\0' in chunk
+            except:
+                return True
+        
+        is_binary = is_binary_file(full_path)
+        
+        if is_binary:
+            # For binary files, return metadata only
+            return {
+                "path": path,
+                "name": os.path.basename(full_path),
+                "size": file_size,
+                "modified": str(int(stat_info.st_mtime)),
+                "type": "binary",
+                "content": None,
+                "message": "Binary file - content not displayed"
+            }
+        else:
+            # For text files, read content
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            except UnicodeDecodeError:
+                # Try with different encoding
+                with open(full_path, 'r', encoding='latin-1') as f:
+                    content = f.read()
+            
+            return {
+                "path": path,
+                "name": os.path.basename(full_path),
+                "size": file_size,
+                "modified": str(int(stat_info.st_mtime)),
+                "type": "text",
+                "content": content
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+
+# Task Graph Visualization Endpoints
+class TaskNode(BaseModel):
+    id: int
+    title: str
+    description: str
+    status: str
+    priority: int
+    agent_id: int
+    agent_name: str
+    parent_id: Optional[int] = None
+    children: List[int] = []
+
+class TaskGraph(BaseModel):
+    agent_id: int
+    agent_name: str
+    nodes: List[TaskNode]
+    edges: List[dict]  # {from: int, to: int, type: "parent-child"}
+
+@app.get("/agents/{agent_id}/task-graph", response_model=TaskGraph)
+async def get_agent_task_graph(agent_id: int, session: Session = Depends(get_session)):
+    """Get the hierarchical task graph for a specific agent."""
+    try:
+        # Verify agent exists
+        agent = session.exec(select(Agent).where(Agent.id == agent_id)).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        
+        # Get all tasks for this agent (including completed ones for graph visualization)
+        tasks = session.exec(
+            select(AgentTask)
+            .where(AgentTask.agent_id == agent_id)
+            .order_by(AgentTask.priority)
+        ).all()
+        
+        # Build task nodes
+        nodes = []
+        edges = []
+        
+        for task in tasks:
+            # Get children for this task
+            children = [t.id for t in tasks if t.parent_id == task.id]
+            
+            node = TaskNode(
+                id=task.id,
+                title=task.title,
+                description=task.description,
+                status=task.status.value,
+                priority=task.priority,
+                agent_id=task.agent_id,
+                agent_name=agent.name,
+                parent_id=task.parent_id,
+                children=children
+            )
+            nodes.append(node)
+            
+            # Create edges for parent-child relationships
+            if task.parent_id:
+                edges.append({
+                    "from": task.parent_id,
+                    "to": task.id,
+                    "type": "parent-child"
+                })
+        
+        return TaskGraph(
+            agent_id=agent_id,
+            agent_name=agent.name,
+            nodes=nodes,
+            edges=edges
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching task graph: {str(e)}")
+
+@app.get("/task-graph/all", response_model=List[TaskGraph])
+async def get_all_agents_task_graphs(session: Session = Depends(get_session)):
+    """Get task graphs for all agents."""
+    try:
+        agents = session.exec(select(Agent)).all()
+        graphs = []
+        
+        for agent in agents:
+            # Get all tasks for this agent
+            tasks = session.exec(
+                select(AgentTask)
+                .where(AgentTask.agent_id == agent.id)
+                .order_by(AgentTask.priority)
+            ).all()
+            
+            # Build task nodes and edges
+            nodes = []
+            edges = []
+            
+            for task in tasks:
+                # Get children for this task
+                children = [t.id for t in tasks if t.parent_id == task.id]
+                
+                node = TaskNode(
+                    id=task.id,
+                    title=task.title,
+                    description=task.description,
+                    status=task.status.value,
+                    priority=task.priority,
+                    agent_id=task.agent_id,
+                    agent_name=agent.name,
+                    parent_id=task.parent_id,
+                    children=children
+                )
+                nodes.append(node)
+                
+                # Create edges for parent-child relationships
+                if task.parent_id:
+                    edges.append({
+                        "from": task.parent_id,
+                        "to": task.id,
+                        "type": "parent-child"
+                    })
+            
+            graph = TaskGraph(
+                agent_id=agent.id,
+                agent_name=agent.name,
+                nodes=nodes,
+                edges=edges
+            )
+            graphs.append(graph)
+        
+        return graphs
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching all task graphs: {str(e)}")
+
+
 # Conversation Endpoints
 @app.get("/conversations/{conversation_id}/messages", response_model=List[Message])
 def get_conversation_messages(conversation_id: int):
